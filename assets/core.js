@@ -5,11 +5,11 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const E = U.esc;
 const VIEWS = {};
 const HELP = {};
-const ST = { user: null, tabs: [], active: null, timer: null, base: "INSTALUM_RRHH", modAbierto: null };
+const ST = { user: null, tabs: [], active: null, timer: null, base: "INSTALUM_RRHH", modCerrados: new Set() };
 const ICON = {
   nuevo: "M5 3h9l5 5v13H5z M14 3v5h5", guardar: "M5 3h12l3 3v15H5z M8 3v6h8V3 M8 21v-7h8v7", deshacer: "M9 7 5 11l4 4 M5 11h10a5 5 0 0 1 0 10h-4",
   buscar: "M10 4a6 6 0 1 0 0 12 6 6 0 1 0 0-12 M14.5 14.5 20 20", imprimir: "M7 9V3h10v6 M5 9h14v8H5z M7 14h10v7H7z", exportar: "M12 4v11 M7 10l5 5 5-5 M4 19h16",
-  ayuda: "M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18 M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14 M12 17.2v.1", cerrar: "M6 6l12 12 M18 6 6 18",
+  ayuda: "M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18 M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14 M12 17.2v.1", cerrar: "M6 6l12 12 M18 6 6 18", inicio: "M3 11.5 12 4l9 7.5 M5.5 9.5V20h5v-6h3v6h5V9.5",
 };
 
 /* ====================================================================== */
@@ -335,13 +335,80 @@ async function bandeja() {
 /*  Ventana principal                                                     */
 /* ====================================================================== */
 const puede = p => !!ST.user && DB.puede(ST.user.perfil, p);
+/* Catálogo de acciones: alimenta el inicio, el navegador, el menú y el buscador «¿Qué desea hacer?» */
 const MODS = [
-  { k: "contrataciones", t: "Contrataciones", items: [["Colaboradores", "colaboradores"], ["Nueva ficha", "nueva", "contrataciones.editar"], ["Fichas incompletas", "incompletas"]] },
-  { k: "capacitaciones", t: "Capacitaciones", items: [["Catálogo anual", "catalogo"], ["Programación", "programacion"], ["Inscripciones", "inscripciones"], ["Asistencia y resultados", "resultados"], ["Certificaciones", "certificaciones"], ["Matriz de competencias", "matriz"], ["Historial por colaborador", "historialcap"], ["Necesidades por calificación", "necesidades"], ["Empresas capacitadoras", "empresas"], ["Capacitadores", "capacitadores"], ["Tipos de capacitación", "tipos"]] },
-  { k: "bonificaciones", t: "Bonificaciones", items: [["Importar encuestas", "importar"], ["Calificaciones del trabajador", "calificaciones"], ["Regla de cálculo", "regla"], ["Cálculo del período", "calculo"], ["Aprobación y pago", "aprobacion"], ["Histórico", "historicobon"]] },
-  { k: "reportes", t: "Reportes", items: [["Colaboradores nuevos", "rep:contratacion"], ["Bonificaciones", "rep:bonificacion"], ["Capacitaciones", "rep:capacitacion"], ["Matriz de competencias", "matriz"]] },
-  { k: "admin", t: "Administración", items: [["Cuentas de usuario", "cuentas"], ["Perfiles y permisos", "perfiles"], ["Bitácora", "bitacora"]] },
+  { k: "contrataciones", t: "Contrataciones", c: "#0067C0" }, { k: "capacitaciones", t: "Capacitaciones", c: "#107C10" },
+  { k: "bonificaciones", t: "Bonificaciones", c: "#B4580A" }, { k: "reportes", t: "Reportes", c: "#6B3FA0" }, { k: "admin", t: "Administración", c: "#5F5F5F" },
 ];
+const ACC = [
+  { m: "contrataciones", k: "nueva", t: "Registrar nuevo colaborador", d: "Crear la ficha de un trabajador que ingresa a la empresa.", perm: "contrataciones.editar", kw: "nueva ficha contratar contratacion ingreso agregar trabajador colaborador registrar crear" },
+  { m: "contrataciones", k: "colaboradores", t: "Buscar colaborador", d: "Ver o modificar una ficha y cambiar su estado (licencia, desvinculado).", kw: "buscar ficha rut nombre editar modificar estado licencia desvincular reactivar trabajador ver" },
+  { m: "contrataciones", k: "incompletas", t: "Fichas por completar", d: "Fichas guardadas como borrador a las que les faltan datos.", kw: "incompleta borrador pendiente completar" },
+  { m: "capacitaciones", k: "asignar", t: "Asignar capacitación a un trabajador", d: "Elegir un trabajador y el área en que se debe capacitar, con prueba de evaluación.", kw: "anadir agregar otra nueva prueba evaluacion examen area trabajador capacitar inscribir asignar individual" },
+  { m: "capacitaciones", k: "masiva", t: "Asignación masiva", d: "Asignar una o varias capacitaciones a muchos trabajadores a la vez.", kw: "masivo masiva grupo grupos varios todos cuadrilla especialidad departamento inscribir asignar" },
+  { m: "capacitaciones", k: "resultados", t: "Registrar asistencia y notas", d: "Al terminar una capacitación: asistencia, nota de la prueba y aprobación.", kw: "prueba nota notas aprobado reprobado asistencia resultado evaluacion examen terminar" },
+  { m: "capacitaciones", k: "historialcap", t: "Capacitaciones de un trabajador", d: "Todo lo que ha realizado un trabajador, con notas y certificaciones.", kw: "historial trabajador ver capacitaciones notas tiene realizado" },
+  { m: "capacitaciones", k: "certificaciones", t: "Certificaciones y vencimientos", d: "Vigentes, por vencer y vencidas; inscribir para renovar.", kw: "certificado certificacion vence vencida alerta renovar vigencia" },
+  { m: "capacitaciones", k: "matriz", t: "Matriz de competencias", d: "Quién está habilitado para trabajar en obra según su especialidad.", kw: "competencias habilitado habilitacion obra matriz" },
+  { m: "capacitaciones", k: "necesidades", t: "Necesidades según clientes", d: "Trabajadores con calificaciones de servicio bajas.", kw: "calificacion cliente encuesta umbral necesidad detectar baja" },
+  { m: "capacitaciones", g: "Planificación", k: "catalogo", t: "Plan anual (catálogo)", d: "Crear, modificar o dar de baja capacitaciones del año.", kw: "catalogo plan anual crear nueva capacitacion modificar baja empresa obligatoria" },
+  { m: "capacitaciones", g: "Planificación", k: "programacion", t: "Fechas y horarios", d: "Programar sesiones y ver el calendario.", kw: "programar fecha horario calendario sesion lugar capacitador" },
+  { m: "capacitaciones", g: "Planificación", k: "inscripciones", t: "Inscritos por capacitación", d: "Inscritos y cupos de una capacitación; anular inscripciones.", kw: "inscritos cupos anular inscripcion lista" },
+  { m: "capacitaciones", g: "Configuración", k: "empresas", t: "Empresas capacitadoras", d: "Empresas u OTEC que dictan las capacitaciones.", kw: "empresa otec proveedor" },
+  { m: "capacitaciones", g: "Configuración", k: "capacitadores", t: "Capacitadores", d: "Relatores que dictan las sesiones.", kw: "capacitador relator profesor instructor" },
+  { m: "capacitaciones", g: "Configuración", k: "tipos", t: "Áreas de capacitación", d: "Tipos o áreas: altura, PVC, aluminio, seguridad…", kw: "tipo tipos area areas" },
+  { m: "bonificaciones", k: "importar", t: "1. Importar encuestas", d: "Traer las encuestas de servicio del mes desde el sistema actual.", kw: "importar encuestas lote cargar paso" },
+  { m: "bonificaciones", k: "calculo", t: "2. Calcular bonificación", d: "Calcular el monto de cada trabajador según la calificación del cliente.", kw: "calcular calculo bonificacion bono monto paso" },
+  { m: "bonificaciones", k: "aprobacion", t: "3. Aprobar y registrar pago", d: "Aprobar o rechazar el cálculo y registrarlo para pago.", kw: "aprobar rechazar pago pagar registrar paso bono bonificacion remuneraciones" },
+  { m: "bonificaciones", g: "Consultas", k: "calificaciones", t: "Calificaciones de un trabajador", d: "Notas de los clientes en los proyectos de un trabajador.", kw: "calificaciones notas cliente trabajador encuesta" },
+  { m: "bonificaciones", g: "Consultas", k: "historicobon", t: "Histórico de bonificaciones", d: "Bonificaciones aprobadas por trabajador y período.", kw: "historico historial bonificaciones pagadas" },
+  { m: "bonificaciones", g: "Configuración", k: "regla", t: "Regla de cálculo (tramos)", d: "Tramos de calificación y monto por proyecto.", kw: "regla tramos montos parametrizar" },
+  { m: "reportes", k: "rep:contratacion", t: "Reporte de colaboradores nuevos", d: "Ingresos de un período, exportable a Excel o PDF.", kw: "reporte informe colaboradores nuevos contratacion ingresos excel pdf" },
+  { m: "reportes", k: "rep:bonificacion", t: "Reporte de bonificaciones", d: "Bonificaciones aprobadas con subtotales por departamento.", kw: "reporte informe bonificaciones excel pdf" },
+  { m: "reportes", k: "rep:capacitacion", t: "Reporte de capacitaciones", d: "Realizadas versus ofertadas, aprobados y notas.", kw: "reporte informe capacitaciones ejecucion excel pdf" },
+  { m: "reportes", k: "matriz", t: "Matriz de competencias", d: "Habilitación de los trabajadores de obra.", kw: "matriz competencias" },
+  { m: "admin", k: "cuentas", t: "Cuentas de usuario", d: "Crear, desbloquear o deshabilitar cuentas.", kw: "cuenta usuario clave contrasena desbloquear crear" },
+  { m: "admin", k: "perfiles", t: "Perfiles y permisos", d: "Qué puede hacer cada perfil.", kw: "perfil permisos acceso rol" },
+  { m: "admin", k: "bitacora", t: "Bitácora de auditoría", d: "Registro de accesos y cambios.", kw: "bitacora auditoria registro log" },
+];
+const vistaDe = k => (k === "nueva" ? "ficha" : k.startsWith("rep:") ? "reporte" : k);
+const accionOk = a => !!VIEWS[vistaDe(a.k)] && permisoVista(vistaDe(a.k), { key: a.k, params: { nueva: a.k === "nueva", tipo: a.k.slice(4) } }) && (!a.perm || puede(a.perm));
+const accionesDe = m => ACC.filter(a => a.m === m && accionOk(a));
+/* búsqueda de acciones por palabras (sin tildes, por prefijo) */
+function buscarAcciones(q) {
+  const ws = U.norm(q).split(/[^a-z0-9ñ]+/).filter(w => w.length > 1);
+  if (!ws.length) return [];
+  const vistos = new Set();
+  return ACC.filter(a => accionOk(a)).map(a => {
+    const tt = U.norm(a.t), txt = (tt + " " + U.norm(a.d) + " " + a.kw).split(/[^a-z0-9ñ]+/);
+    let sc = 0, n = 0; for (const w of ws) { const hit = txt.some(x => x.startsWith(w) || (w.length > 3 && x.startsWith(w.slice(0, -1)))); if (!hit) continue; n++; sc += tt.includes(w.slice(0, 4)) ? 2 : 1; }
+    return n && n >= Math.max(1, ws.length - 1) ? { a, sc: n * 10 + sc } : null;
+  }).filter(Boolean).sort((x, y) => y.sc - x.sc).map(x => x.a).filter(a => !vistos.has(a.k) && vistos.add(a.k)).slice(0, 8);
+}
+const accHtml = (a, on) => `<button class="acc ${on ? "on" : ""}" data-acc="${E(a.k)}"><b>${E(a.t)}</b><span>${E(MODS.find(m => m.k === a.m).t)} · ${E(a.d)}</span></button>`;
+const sinAcciones = `<p class="muted" style="margin:6px 2px">No se encontró una función con esas palabras. Pruebe con otra, por ejemplo «capacitación», «ficha» o «pago».</p>`;
+function paleta() {
+  if (!ST.user || $(".veil")) return;
+  let res = [], sel = 0;
+  dialog({ title: "¿Qué desea hacer? — SGRH Instalum", icon: null, wide: true, buttons: [{ label: "Cerrar" }],
+    html: `<input type="text" id="paQ" placeholder="Escriba lo que necesita: asignar capacitación, prueba, nueva ficha, pago…" style="height:32px;font-size:14px" maxlength="60"><div id="paR" class="acc-res" style="margin-top:8px"></div>`,
+    mount: v => {
+      const q = $("#paQ", v), r = $("#paR", v);
+      const go = a => { v._close(null); abrir(a.k); };
+      const pinta = () => {
+        res = q.value.trim() ? buscarAcciones(q.value) : ACC.filter(accionOk).filter((a, i, l) => l.findIndex(x => x.k === a.k) === i).slice(0, 8);
+        sel = Math.min(sel, Math.max(0, res.length - 1));
+        r.innerHTML = res.length ? res.map((a, i) => accHtml(a, i === sel)).join("") : sinAcciones;
+        $$("[data-acc]", r).forEach((b, i) => b.onclick = () => go(res[i]));
+      };
+      q.oninput = () => { sel = 0; pinta(); };
+      q.onkeydown = e => {
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); sel = Math.max(0, Math.min(res.length - 1, sel + (e.key === "ArrowDown" ? 1 : -1))); pinta(); }
+        if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); if (res[sel]) go(res[sel]); }
+      };
+      pinta(); setTimeout(() => q.focus(), 0);
+    } });
+}
 function abrirApp() {
   $("#login").classList.add("hidden"); $("#login").innerHTML = "";
   const A = $("#app"); A.classList.remove("hidden");
@@ -353,7 +420,7 @@ function abrirApp() {
     <section class="right"><div class="doctabs" id="doctabs"></div><div class="work" id="work"></div></section></div>
   <footer class="statusbar"><span id="sMsg">Listo</span><span id="sUser"></span><span>Base: ${E(ST.base)}</span><span>${DB.persistente ? "Conectado" : "Conectado · datos solo en memoria"}</span><span id="sClock"></span></footer>`;
   $("#wClose").onclick = () => cerrarSesion();
-  ST.modAbierto = puede("contrataciones") ? "contrataciones" : (MODS.find(m => puede(m.k)) || {}).k;
+  ST.modCerrados = new Set();
   buildToolbar(); reloj(); actividad();
   abrir("panel");
 }
@@ -377,20 +444,16 @@ function setStatus(t) { const s = $("#sMsg"); if (s) s.textContent = t; }
 /* ---------- menú superior (se reconstruye en cada acción: permisos vigentes, RF-SEG-03) ---------- */
 function buildMenu() {
   const M = [
-    ["Archivo", [["Panel principal", () => abrir("panel")], ["Cerrar documento", () => cerrarTab(ST.active), "Ctrl+Q"], null, ["Imprimir…", () => window.print(), "Ctrl+P"], null, ["Cerrar sesión", () => cerrarSesion()],
+    ["Archivo", [["Inicio", () => abrir("panel")], ["¿Qué desea hacer?…", paleta, "Ctrl+K"], ["Cerrar documento", () => cerrarTab(ST.active), "Ctrl+Q"], null, ["Imprimir…", () => window.print(), "Ctrl+P"], null, ["Cerrar sesión", () => cerrarSesion()],
       ["Salir", async () => { if (await confirmar("¿Desea salir de SGRH Instalum?", "<p>Se cerrará la sesión y la aplicación.</p>")) { DB.log(ST.user.user, "Seguridad", "Cierre de sesión", "Salida de la aplicación"); apagado(); } }]]],
     ["Edición", [["Guardar", () => tool("guardar"), "F2"], ["Deshacer cambios", () => tool("deshacer")]]],
-    ["Colaboradores", [["Buscar colaborador", () => abrir("colaboradores"), "", "contrataciones"], ["Nueva ficha", () => abrir("nueva"), "Ctrl+Alt+N", "contrataciones.editar"], ["Fichas incompletas", () => abrir("incompletas"), "", "contrataciones"]]],
-    ["Capacitaciones", MODS[1].items.map(i => [i[0], () => abrir(i[1]), "", "capacitaciones"])],
-    ["Bonificaciones", MODS[2].items.map(i => [i[0], () => abrir(i[1]), "", i[1] === "aprobacion" ? null : "bonificaciones"]).map(x => x[0] === "Aprobación y pago" ? [x[0], x[1], "", ["bonificaciones", "bonificaciones.aprobar"]] : x)],
-    ["Reportes", MODS[3].items.map(i => [i[0], () => abrir(i[1]), "", i[1] === "matriz" ? ["reportes", "capacitaciones"] : "reportes"])],
-    ["Administración", MODS[4].items.map(i => [i[0], () => abrir(i[1]), "", "admin"])],
+    ...MODS.map(m => [m.k === "contrataciones" ? "Colaboradores" : m.t, (() => { const its = []; let g; for (const a of ACC.filter(a => a.m === m.k)) { if (a.g !== g && its.length) its.push(null); g = a.g; its.push([a.t, () => abrir(a.k), a.k === "nueva" ? "Ctrl+Alt+N" : "", null, !accionOk(a)]); } return its; })()]),
     ["Ventana", [["Cerrar todos los documentos", async () => { for (const t of [...ST.tabs]) if (t.key !== "panel") { if (!await cerrarTab(t.key)) break; } }]]],
     ["Ayuda", [["Ayuda de esta pantalla", ayudaPantalla, "F1"], ["Trazabilidad de requisitos", () => abrir("trazabilidad")], ["Atajos de teclado", atajos], null, ["Restablecer datos de demostración", reiniciarDemo], ["Acerca de SGRH Instalum", acerca]]],
   ];
   const ok = p => !p || (Array.isArray(p) ? p.some(puede) : puede(p));
   const mb = $("#menubar"); if (!mb) return;
-  mb.innerHTML = M.map(([t, its], i) => `<div class="mi" data-m="${i}"><button tabindex="-1">${t}</button><div class="drop">${its.map((x, j) => x ? `<button data-j="${j}" ${x[3] && !ok(x[3]) ? "disabled" : ""}>${x[0]}<span class="k">${x[2] || ""}</span></button>` : "<hr>").join("")}</div></div>`).join("");
+  mb.innerHTML = M.map(([t, its], i) => `<div class="mi" data-m="${i}"><button tabindex="-1">${t}</button><div class="drop">${its.map((x, j) => x ? `<button data-j="${j}" ${(x[3] && !ok(x[3])) || x[4] ? "disabled" : ""}>${x[0]}<span class="k">${x[2] || ""}</span></button>` : "<hr>").join("")}</div></div>`).join("");
   let abierto = null;
   const cerrar = () => { $$(".mi", mb).forEach(m => m.classList.remove("open")); abierto = null; };
   $$(".mi", mb).forEach(mi => {
@@ -401,7 +464,7 @@ function buildMenu() {
   });
   document.onclick = cerrar;
 }
-function atajos() { dialog({ head: "Atajos de teclado", html: "<ul><li><b>F1</b> · Ayuda de la pantalla actual</li><li><b>F2</b> · Guardar el documento activo</li><li><b>Ctrl + Alt + N</b> · Nueva ficha de colaborador</li><li><b>Ctrl + Q</b> · Cerrar el documento activo</li><li><b>Enter</b> · Abrir el registro seleccionado o confirmar un mensaje</li><li><b>Esc</b> · Cerrar un mensaje</li><li><b>↑ ↓</b> · Moverse en las listas</li></ul>" }); }
+function atajos() { dialog({ head: "Atajos de teclado", html: "<ul><li><b>F1</b> · Ayuda de la pantalla actual</li><li><b>F2</b> · Guardar el documento activo</li><li><b>Ctrl + K</b> · Buscar una función («¿Qué desea hacer?»)</li><li><b>Ctrl + Alt + N</b> · Nueva ficha de colaborador</li><li><b>Ctrl + Q</b> · Cerrar el documento activo</li><li><b>Enter</b> · Abrir el registro seleccionado o confirmar un mensaje</li><li><b>Esc</b> · Cerrar un mensaje</li><li><b>↑ ↓</b> · Moverse en las listas</li></ul>" }); }
 function acerca() { dialog({ head: "SGRH Instalum · versión 1.0 (prototipo funcional)", html: "<p>Sistema de Gestión de Recursos Humanos para Instalum.</p><p>Grupo 1 · Ingeniería de Requisitos (RQY1101) · Duoc UC.<br>Product Owner: Carolina Vial Martín · Scrum Master: Benjamín Parra.<br>Development Team: David Martínez, Rafael Cornejo y Benjamín Rojas.</p><p class='muted small'>Los datos se guardan en este navegador. Nombres, RUT, proyectos y montos son ficticios. El sistema informático actual de Instalum (encuestas de servicio) y el correo se simulan dentro del prototipo.</p>" }); }
 async function reiniciarDemo() {
   if (!await confirmar("¿Restablecer los datos de demostración?", "<p>Se borrarán las fichas, capacitaciones, cálculos, cuentas y bitácora creadas en este navegador y se cargarán los datos iniciales. Se cerrará la sesión.</p>")) return;
@@ -415,20 +478,23 @@ function ayudaPantalla() {
 }
 
 /* ---------- barra de herramientas ---------- */
-const TOOLS = [["nuevo", "Nuevo"], ["guardar", "Guardar"], ["deshacer", "Deshacer"], null, ["buscar", "Buscar"], ["imprimir", "Imprimir"], ["exportar", "Exportar"], null, ["ayuda", "Ayuda"], ["cerrar", "Cerrar"]];
+const TOOLS = [["inicio", "Inicio"], null, ["nuevo", "Nuevo"], ["guardar", "Guardar"], ["deshacer", "Deshacer"], null, ["buscar", "Buscar"], ["imprimir", "Imprimir"], ["exportar", "Exportar"], null, ["ayuda", "Ayuda"], ["cerrar", "Cerrar"]];
 function buildToolbar() {
   const tb = $("#toolbar");
   tb.innerHTML = TOOLS.map(t => t ? `<button class="tool ${t[0] === "cerrar" ? "red" : ""}" data-t="${t[0]}" title="${t[1]}${t[0] === "ayuda" ? " (F1)" : t[0] === "guardar" ? " (F2)" : ""}" tabindex="-1"><svg viewBox="0 0 24 24"><path d="${ICON[t[0]]}"/></svg>${t[1]}</button>` : `<span class="tsep"></span>`).join("");
+  tb.insertAdjacentHTML("beforeend", `<button class="tsearch" id="tbQ" title="Buscar una función (Ctrl+K)"><svg viewBox="0 0 24 24"><path d="${ICON.buscar}"/></svg><span>¿Qué desea hacer?</span><kbd>Ctrl+K</kbd></button>`);
+  $("#tbQ").onclick = paleta;
   $$(".tool", tb).forEach(b => b.onclick = () => tool(b.dataset.t));
 }
 function toolsDe(tab) { const v = tab && VIEWS[tab.view]; let T = {}; try { T = (v && v.tools ? v.tools(tab) : {}) || {}; } catch (e) { console.error(e); } return T; }
 function syncTools() {
   const tab = ST.tabs.find(t => t.key === ST.active), T = toolsDe(tab);
-  $$(".tool").forEach(b => { const k = b.dataset.t; b.disabled = !(k === "cerrar" || k === "imprimir" || k === "ayuda" || T[k]); });
+  $$(".tool").forEach(b => { const k = b.dataset.t; b.disabled = !(k === "inicio" || k === "cerrar" || k === "imprimir" || k === "ayuda" || T[k]); });
 }
 function tool(k) {
   const tab = ST.tabs.find(t => t.key === ST.active); if (!tab) return;
   const T = toolsDe(tab);
+  if (k === "inicio") return abrir("panel");
   if (k === "cerrar") return cerrarTab(tab.key);
   if (k === "ayuda") return ayudaPantalla();
   if (k === "imprimir" && !T.imprimir) return window.print();
@@ -441,6 +507,7 @@ document.addEventListener("keydown", e => {
   if (e.key === "F2") { e.preventDefault(); tool("guardar"); }
   if (e.ctrlKey && e.altKey && (e.key === "n" || e.key === "N")) { e.preventDefault(); if (puede("contrataciones.editar")) abrir("nueva"); }
   if (e.ctrlKey && !e.altKey && (e.key === "q" || e.key === "Q")) { e.preventDefault(); cerrarTab(ST.active); }
+  if (e.ctrlKey && !e.altKey && (e.key === "k" || e.key === "K")) { e.preventDefault(); paleta(); }
 });
 window.addEventListener("beforeunload", e => { if (ST.user && ST.tabs.some(t => t.dirty)) { e.preventDefault(); e.returnValue = ""; } });
 
@@ -455,22 +522,23 @@ function itemOn(tab, k) {
   if (tab.key === k) return true;
   if (k === "nueva") return tab.key.startsWith("nueva-");
   if (k === "colaboradores") return tab.view === "ficha" && !tab.key.startsWith("nueva-");
+  if (k === "historialcap") return tab.view === "historialcap";
   return false;
 }
 function arbol() {
   const tab = ST.tabs.find(t => t.key === ST.active);
-  let h = `<li><button class="${itemOn(tab, "panel") ? "on" : ""}" data-k="panel">⌂&nbsp; Panel principal</button></li>`;
+  let h = `<li><button class="${itemOn(tab, "panel") ? "on" : ""}" data-k="panel">⌂&nbsp; Inicio</button></li>`;
   for (const m of MODS) {
-    const items = m.items.filter(i => permisoVista(VIEWS[i[1]] ? i[1] : i[1].startsWith("rep:") ? "reporte" : i[1] === "nueva" ? "ficha" : i[1], { params: { tipo: i[1].slice(4) } }) && (!i[2] || puede(i[2])));
+    const items = accionesDe(m.k);
     if (!items.length) continue;
-    const abiertoMod = m.k === ST.modAbierto;
-    h += `<li><button class="mod" data-mod="${m.k}">${abiertoMod ? "▾" : "▸"}&nbsp; ${m.t}</button>`;
-    if (abiertoMod) h += `<ul class="tree sub">${items.map(i => `<li><button class="${itemOn(tab, i[1]) ? "on" : ""}" data-k="${i[1]}">${i[0]}</button></li>`).join("")}</ul>`;
+    const abiertoMod = !ST.modCerrados.has(m.k);
+    h += `<li><button class="mod" data-mod="${m.k}" style="--mc:${m.c}">${abiertoMod ? "▾" : "▸"}&nbsp; ${m.t}</button>`;
+    if (abiertoMod) { let g; h += `<ul class="tree sub">${items.map(a => { const hd = a.g && a.g !== g ? `<li class="tg">${E(a.g)}</li>` : ""; g = a.g; return hd + `<li><button class="${itemOn(tab, a.k) ? "on" : ""}" data-k="${a.k}" title="${E(a.d)}">${E(a.t)}</button></li>`; }).join("")}</ul>`; }
     h += "</li>";
   }
   $("#tree").innerHTML = h;
   $$("#tree [data-k]").forEach(b => b.onclick = () => abrir(b.dataset.k));
-  $$("#tree [data-mod]").forEach(b => b.onclick = () => { ST.modAbierto = ST.modAbierto === b.dataset.mod ? null : b.dataset.mod; arbol(); });
+  $$("#tree [data-mod]").forEach(b => b.onclick = () => { const k = b.dataset.mod; if (ST.modCerrados.has(k)) ST.modCerrados.delete(k); else ST.modCerrados.add(k); arbol(); });
 }
 function abrir(key, params = {}) {
   if (!ST.user) return;
@@ -490,8 +558,7 @@ function abrir(key, params = {}) {
     ST.tabs.push(tab);
   } else if (params && Object.keys(params).length) { Object.assign(tab.params, params); const vv = VIEWS[tab.view]; if (vv.reparam) vv.reparam(tab); else if (vv.init) vv.init(tab, true); }
   ST.active = tab.key;
-  const m = MODS.find(m => puede(m.k) && m.items.some(i => i[1] === key || (tab.view === "ficha" && i[1] === "colaboradores") || (tab.view === "historialcap" && i[1] === "historialcap")));
-  if (m) ST.modAbierto = m.k;
+  const ac = ACC.find(a => accionOk(a) && itemOn(tab, a.k)); if (ac) ST.modCerrados.delete(ac.m);
   pintar();
 }
 async function cerrarTab(key) {

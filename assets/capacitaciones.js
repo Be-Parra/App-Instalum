@@ -40,18 +40,27 @@ function certsAlerta() {
   return [...ult.values()].filter(c => { const f = DB.ficha(c.ficha); return f && f.estado !== "Desvinculado" && ["Vencida", "Por vencer"].includes(CAPR.certEstado(c)); })
     .sort((a, b) => (a.vence < b.vence ? -1 : 1));
 }
+/* aviso no bloqueante en las pantallas de Capacitaciones; el detalle se abre a pedido */
 function alertaCap() {
-  if (ST.alertaCap === ST.user.user + ST.base) return; ST.alertaCap = ST.user.user + ST.base;
-  const l = certsAlerta(); if (!l.length) return;
-  setTimeout(async () => {
+  const l = certsAlerta();
+  if (!l.length || ST.alertaOculta) return "";
+  if (ST.alertaLog !== ST.user.user + ST.base) { ST.alertaLog = ST.user.user + ST.base; DB.log(ST.user.user, "Capacitaciones", "Alerta de certificaciones", `${l.length} vencida(s) o por vencer`); }
+  const v = l.filter(c => CAPR.certEstado(c) === "Vencida").length;
+  return `<div class="bar warn alerta-cert"><b class="ic">⚠</b><span>Atención: ${v ? `${v} certificación(es) vencida(s) y ` : ""}${l.length - v} por vencer en los próximos 30 días.</span><button class="link" data-alerta="ver">Ver detalle</button><button class="link" data-alerta="ocultar">Ocultar</button></div>`;
+}
+function bindAlertaCap(w) {
+  $$("[data-alerta]", w).forEach(b => b.onclick = async () => {
+    if (b.dataset.alerta === "ocultar") { ST.alertaOculta = true; guardarScroll(); return pintar(); }
+    const l = certsAlerta();
     const r = await dialog({ icon: "warn", wide: true, head: `Certificaciones que requieren atención (${l.length})`,
       html: `<p>Las siguientes certificaciones están vencidas o vencen en los próximos 30 días:</p><div class="lv-wrap" style="max-height:220px"><table class="lv"><thead><tr><th>Colaborador</th><th>Certificación</th><th>Vence</th><th>Estado</th></tr></thead><tbody>${l.map(c => `<tr><td>${E(FICHA.nombre(DB.ficha(c.ficha)))}</td><td>${E(c.nombre)}</td><td>${U.fecha(c.vence)}</td><td>${pill(CAPR.certEstado(c))}</td></tr>`).join("")}</tbody></table></div>`,
-      buttons: [{ label: "Ver certificaciones", pri: true, value: "v" }, { label: "Cerrar" }] });
+      buttons: [{ label: "Ir a certificaciones", pri: true, value: "v" }, { label: "Cerrar" }] });
     if (r === "v") abrir("certificaciones");
-  }, 50);
-  DB.log(ST.user.user, "Capacitaciones", "Alerta de certificaciones", `${l.length} vencida(s) o por vencer`);
+  });
 }
-const capView = (o) => Object.assign({ mod: () => "Capacitaciones", permiso: "capacitaciones" }, o, { mount(w, tab) { alertaCap(); o.mount && o.mount.call(this, w, tab); } });
+const capView = (o) => Object.assign({ mod: () => "Capacitaciones", permiso: "capacitaciones" }, o, {
+  render(tab) { const h = o.render.call(this, tab); if (tab.view === "certificaciones") return h; const i = h.indexOf("</div>"); return i > 0 && h.startsWith("<div class=\"dochead\">") ? h.slice(0, i + 6) + alertaCap() + h.slice(i + 6) : alertaCap() + h; },
+  mount(w, tab) { bindAlertaCap(w); o.mount && o.mount.call(this, w, tab); } });
 
 /* ---------- Empresas capacitadoras (RF-CAP-13) ---------- */
 VIEWS.empresas = capView({
@@ -168,7 +177,7 @@ VIEWS.catalogo = capView({
     if (c && c.anio === +tab.f.anio) {
       const vs = DB.d.versiones.filter(v => v.cap === c.id).sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
       det = `<fieldset class="fs"><legend>${E(c.id)} · ${E(c.nombre)}</legend><div class="grid2"><div>
-        <p><b>Tipo:</b> ${E(c.tipo)} · <b>Empresa:</b> ${E(nombreEmpresa(c.empresa))}<br><b>Duración:</b> ${c.dias} día(s) · <b>Cupos:</b> ${c.cupos} (${CAPR.cuposLibres(c)} libres)<br><b>Obligatoria:</b> ${c.obligatoria ? "Sí, para " + E(c.especialidades.join(", ")) : "No"}<br><b>Competencia que acredita:</b> ${E(c.competencia || "—")} · <b>Vigencia:</b> ${c.vigenciaMeses ? c.vigenciaMeses + " meses" : "permanente"}${c.estado === "Dada de baja" ? `<br><b>Baja:</b> ${E(c.motivoBaja || "")}` : ""}</p>
+        <p><b>Tipo:</b> ${E(c.tipo)} · <b>Empresa:</b> ${E(nombreEmpresa(c.empresa))}<br><b>Duración:</b> ${c.dias} día(s) · <b>Cupos:</b> ${c.cupos} (${CAPR.cuposLibres(c)} libres)<br><b>Obligatoria:</b> ${c.obligatoria ? "Sí, para " + E(c.especialidades.join(", ")) : "No"}<br><b>Competencia que acredita:</b> ${E(c.competencia || "—")} · <b>Vigencia:</b> ${c.vigenciaMeses ? c.vigenciaMeses + " meses" : "permanente"}<br><b>Prueba de evaluación:</b> ${c.prueba ? `Sí · nota mínima ${U.num1(c.notaMin || 4)}` : "No"}${c.estado === "Dada de baja" ? `<br><b>Baja:</b> ${E(c.motivoBaja || "")}` : ""}</p>
         <p><b>Sesiones programadas:</b></p><ul>${vs.length ? vs.map(v => `<li>${U.fecha(v.fecha)} ${v.inicio}–${v.termino} · ${E(v.lugar)}${v.cerrada ? " · realizada" : ""}</li>`).join("") : "<li>Sin fecha programada</li>"}</ul></div>
         <div><p><b>Historial de modificaciones:</b></p><ul>${c.historial.slice().reverse().slice(0, 6).map(h => `<li>${E(h.fecha)} · ${E(h.usuario)} · ${E(h.detalle)}</li>`).join("")}</ul></div></div></fieldset>`;
     }
@@ -195,16 +204,18 @@ VIEWS.catalogo = capView({
     if (c && c.estado === "Dada de baja") return aviso("Capacitación dada de baja", "<p>Una capacitación dada de baja no se puede modificar.</p>", "warn");
     if (!DB.d.empresas.length || !DB.d.tipos.length) return aviso("Faltan datos maestros", "<p>Registre primero empresas capacitadoras y tipos de capacitación.</p>", "warn");
     const usados = c ? CAPR.cuposUsados(c.id) : 0;
-    const v = c ? { ...c, vigenciaMeses: String(c.vigenciaMeses), cupos: String(c.cupos), dias: String(c.dias) } : { anio: String(tab.f.anio >= U.anio() ? tab.f.anio : U.anio()), vigenciaMeses: "12", obligatoria: false, especialidades: [] };
+    const v = c ? { ...c, vigenciaMeses: String(c.vigenciaMeses), cupos: String(c.cupos), dias: String(c.dias), notaMin: U.num1(c.notaMin || 4) } : { anio: String(tab.f.anio >= U.anio() ? tab.f.anio : U.anio()), vigenciaMeses: "12", obligatoria: false, especialidades: [], prueba: true, notaMin: "4,0" };
     formulario({ head: c ? `Modificar ${c.id}` : "Nueva capacitación del catálogo anual",
       campos: [{ k: "nombre", t: "Nombre", req: true, max: 80 }, { k: "tipo", t: "Tipo", type: "select", req: true, opts: DB.d.tipos.map(t => t.nombre) }, { k: "empresa", t: "Empresa capacitadora", type: "select", req: true, opts: DB.d.empresas.map(e => [e.rut, e.razon]) },
         { k: "anio", t: "Año del plan", type: "select", req: true, opts: [U.anio(), U.anio() + 1].map(String), vacio: false, dis: !!c }, { k: "dias", t: "Duración (días)", type: "number", req: true, min: 1, maxv: 30 }, { k: "cupos", t: "Cupos", type: "number", req: true, min: 1, maxv: 200, nota: c ? `${usados} ocupados` : "" },
         { k: "competencia", t: "Competencia que acredita", type: "select", opts: CAT.especialidades, vacio: "Ninguna" }, { k: "vigenciaMeses", t: "Vigencia del certificado", type: "select", req: true, vacio: false, opts: [["0", "Permanente"], ["6", "6 meses"], ["12", "12 meses"], ["24", "24 meses"], ["36", "36 meses"]] },
-        { k: "obligatoria", t: "Obligatoria", type: "check", lbl: "Obligatoria para trabajar en obra" }, { k: "especialidades", t: "Especialidades", type: "checks", opts: CAT.especialidades }],
+        { k: "obligatoria", t: "Obligatoria", type: "check", lbl: "Obligatoria para trabajar en obra" }, { k: "especialidades", t: "Especialidades", type: "checks", opts: CAT.especialidades },
+        { k: "prueba", t: "Prueba de evaluación", type: "check", lbl: "Los participantes rinden una prueba con nota (1,0 a 7,0)" }, { k: "notaMin", t: "Nota mínima para aprobar", ph: "4,0", max: 3 }],
       valores: v,
-      onMount: d => { const sync = () => { const on = $("#fm_obligatoria", d).checked; $$('[data-k="especialidades"]', d).forEach(x => { x.disabled = !on; if (!on) x.checked = false; }); }; $("#fm_obligatoria", d).onchange = sync; sync(); },
+      onMount: d => { const sync = () => { const on = $("#fm_obligatoria", d).checked; $$('[data-k="especialidades"]', d).forEach(x => { x.disabled = !on; if (!on) x.checked = false; }); }; $("#fm_obligatoria", d).onchange = sync; sync(); const sp = () => { $("#fm_notaMin", d).disabled = !$("#fm_prueba", d).checked; }; $("#fm_prueba", d).onchange = sp; sp(); },
       guardar: x => {
         x.anio = c ? c.anio : +x.anio; x.dias = +x.dias; x.cupos = +x.cupos; x.vigenciaMeses = +x.vigenciaMeses;
+        const nm = leerNota(x.notaMin || "4"); if (x.prueba && nm == null) return "La nota mínima debe estar entre 1,0 y 7,0."; x.notaMin = x.prueba ? nm : (c ? c.notaMin || 4 : 4);
         if (!x.nombre || !x.tipo || !x.empresa) return "Complete nombre, tipo y empresa capacitadora.";
         if (!Number.isInteger(x.dias) || x.dias < 1 || x.dias > 30) return "La duración debe ser un número entero de días entre 1 y 30.";
         if (!Number.isInteger(x.cupos) || x.cupos < 1 || x.cupos > 200) return "Los cupos deben ser un número entero entre 1 y 200.";
@@ -214,15 +225,15 @@ VIEWS.catalogo = capView({
         if (!x.obligatoria) x.especialidades = [];
         const u = ST.user.user;
         if (c) {
-          const L = { nombre: "Nombre", tipo: "Tipo", empresa: "Empresa", dias: "Duración", cupos: "Cupos", competencia: "Competencia", vigenciaMeses: "Vigencia", obligatoria: "Obligatoria", especialidades: "Especialidades" };
+          const L = { nombre: "Nombre", tipo: "Tipo", empresa: "Empresa", dias: "Duración", cupos: "Cupos", competencia: "Competencia", vigenciaMeses: "Vigencia", obligatoria: "Obligatoria", especialidades: "Especialidades", prueba: "Prueba", notaMin: "Nota mínima" };
           const camb = Object.keys(L).filter(k => String(c[k]) !== String(x[k])).map(k => `${L[k]}: «${k === "empresa" ? nombreEmpresa(c[k]) : String(c[k]) || "—"}» → «${k === "empresa" ? nombreEmpresa(x[k]) : String(x[k]) || "—"}»`);
           if (!camb.length) { setTimeout(() => { tab.msg = "No hubo cambios."; pintar(); }, 0); return; }
-          Object.assign(c, { nombre: x.nombre, tipo: x.tipo, empresa: x.empresa, dias: x.dias, cupos: x.cupos, competencia: x.competencia, vigenciaMeses: x.vigenciaMeses, obligatoria: x.obligatoria, especialidades: x.especialidades });
+          Object.assign(c, { nombre: x.nombre, tipo: x.tipo, empresa: x.empresa, dias: x.dias, cupos: x.cupos, competencia: x.competencia, vigenciaMeses: x.vigenciaMeses, obligatoria: x.obligatoria, especialidades: x.especialidades, prueba: x.prueba, notaMin: x.notaMin });
           camb.forEach(t => c.historial.push({ fecha: U.ahora(), usuario: u, detalle: t }));
           DB.log(u, "Capacitaciones", "Modificación de capacitación", `${c.id} · ${camb.join(" · ")}`);
           setTimeout(() => this.trasGuardar(tab, c, "Capacitación modificada"), 0);
         } else {
-          const n = { id: CAPR.nuevoCapId(x.anio), nombre: x.nombre, tipo: x.tipo, empresa: x.empresa, dias: x.dias, anio: x.anio, cupos: x.cupos, obligatoria: x.obligatoria, especialidades: x.especialidades, competencia: x.competencia, vigenciaMeses: x.vigenciaMeses, requiereCert: true, estado: "Publicada", creada: U.hoy(), historial: [{ fecha: U.ahora(), usuario: u, detalle: "Creación en el catálogo" }] };
+          const n = { id: CAPR.nuevoCapId(x.anio), nombre: x.nombre, tipo: x.tipo, empresa: x.empresa, dias: x.dias, anio: x.anio, cupos: x.cupos, obligatoria: x.obligatoria, especialidades: x.especialidades, competencia: x.competencia, vigenciaMeses: x.vigenciaMeses, prueba: x.prueba, notaMin: x.notaMin, requiereCert: true, estado: "Publicada", creada: U.hoy(), historial: [{ fecha: U.ahora(), usuario: u, detalle: "Creación en el catálogo" }] };
           DB.d.capacitaciones.push(n); DB.log(u, "Capacitaciones", "Creación de capacitación", `${n.id} · ${n.nombre}${n.obligatoria ? " (obligatoria: " + n.especialidades.join(", ") + ")" : ""}`);
           tab.f.anio = n.anio; setTimeout(() => this.trasGuardar(tab, n, "Capacitación creada"), 0);
         }
@@ -338,8 +349,8 @@ VIEWS.inscripciones = capView({
       const estadoDe = f => { const i = ins.find(i => i.ficha === f.id && ["Inscrito", "Pendiente (sin cupo)"].includes(i.estado)); if (i) return i.estado; if (f.estado === "Licencia") return "No disponible (licencia)"; if (CAPR.tieneVigente(f.id, c.tipo)) return "Ya certificado"; return ""; };
       const cand = this.candidatos(tab);
       const filas = cand.map(f => { const st = estadoDe(f), bloq = st === "Inscrito" || st === "Pendiente (sin cupo)" || st.startsWith("No disponible"); return `<tr class="${bloq ? "mut" : ""}"><td><input type="checkbox" data-m="${f.id}" ${tab.marc.has(f.id) && !bloq ? "checked" : ""} ${bloq ? "disabled" : ""} aria-label="Seleccionar ${E(FICHA.nombre(f))}"></td><td>${E(f.id)}</td><td>${E(FICHA.nombre(f))}</td><td>${E(f.cargo.cargo || "—")}</td><td>${E(f.cargo.departamento || "—")}</td><td>${E(f.cargo.especialidad || "—")}</td><td>${st ? (st === "Ya certificado" ? `<span class="muted">${st}</span>` : pill(st.startsWith("No disponible") ? "Licencia" : st).replace(">Licencia<", ">" + st + "<")) : ""}</td></tr>`; }).join("");
-      const lvIns = listview({ cols: [{ k: "id", t: "Inscripción", w: 95 }, { k: "nom", t: "Colaborador" }, { k: "ver", t: "Sesión" }, { k: "origen", t: "Origen" }, { k: "fecha", t: "Fecha", f: r => U.fecha(r.fecha), w: 90 }, { k: "estado", t: "Estado", f: r => pill(r.estado), w: 150 }],
-        rows: ins.map(i => { const v = DB.version(i.version), f = DB.ficha(i.ficha); return { _id: i.id, id: i.id, nom: f ? FICHA.nombre(f) : i.ficha, ver: v ? `${U.fecha(v.fecha)} ${v.inicio}` : "Sin sesión programada", origen: i.origen, fecha: i.fecha, estado: i.estado }; }).sort((a, b) => (a.id < b.id ? 1 : -1)), sel: tab.selIns, empty: "Aún no hay inscritos." });
+      const lvIns = listview({ cols: [{ k: "id", t: "Inscripción", w: 95 }, { k: "nom", t: "Colaborador" }, { k: "ver", t: "Sesión" }, { k: "origen", t: "Origen" }, { k: "prueba", t: "Prueba", w: 90 }, { k: "fecha", t: "Fecha", f: r => U.fecha(r.fecha), w: 90 }, { k: "estado", t: "Estado", f: r => pill(r.estado), w: 150 }],
+        rows: ins.map(i => { const v = DB.version(i.version), f = DB.ficha(i.ficha); return { _id: i.id, id: i.id, nom: f ? FICHA.nombre(f) : i.ficha, ver: v ? `${U.fecha(v.fecha)} ${v.inicio}` : "Sin sesión programada", origen: i.origen, prueba: i.prueba ? (i.nota != null ? "Nota " + U.num1(i.nota) : "Sí · mín. " + U.num1(i.notaMin || 4)) : "No", fecha: i.fecha, estado: i.estado }; }).sort((a, b) => (a.id < b.id ? 1 : -1)), sel: tab.selIns, empty: "Aún no hay inscritos." });
       body = `<div class="bar ${libre ? "info" : "warn"}"><b class="ic">${libre ? "i" : "⚠"}</b><span>${E(c.nombre)} · cupos: ${c.cupos} · ocupados: ${c.cupos - libre} · <b>libres: ${libre}</b> · próxima sesión: ${prox ? U.fecha(prox.fecha) + " " + prox.inicio : "sin programar"}${c.obligatoria ? " · obligatoria para " + E(c.especialidades.join(", ")) : ""}</span></div>
       ${tab.origen ? `<div class="bar info"><b class="ic">i</b><span>${E(tab.origen)}</span></div>` : ""}
       <div class="filters"><label>Buscar <input type="text" id="iQ" value="${E(tab.f.q)}" placeholder="Nombre, RUT o N° ficha" style="width:180px"></label><label>Departamento <select id="iD">${opts(CAT.departamentos, tab.f.depto, "Todos")}</select></label><label>Especialidad <select id="iE">${opts(CAT.especialidades, tab.f.esp, "Todas")}</select></label>
@@ -394,52 +405,86 @@ VIEWS.inscripciones = capView({
 });
 HELP.inscripciones = { t: "Inscripciones", html: "<ul><li>Elija la capacitación: se muestran cupos libres y la próxima sesión.</li><li>Marque colaboradores uno a uno, o filtre por departamento o especialidad y pulse <b>Marcar grupo filtrado</b> para asignar a un grupo.</li><li>Al inscribir, el sistema informa quién quedó inscrito y quién no, con el motivo (sin cupos, ya inscrito, licencia).</li><li>Los colaboradores con licencia aparecen como no disponibles. Los desvinculados no aparecen.</li><li><b>Anular inscripción</b> libera el cupo; si hay pendientes por falta de cupo, el primero se inscribe automáticamente.</li></ul>" };
 
-/* ---------- Asistencia y resultados (RF-CAP-04 y RF-CAP-05) ---------- */
+/* ---------- Asistencia, prueba y resultados (RF-CAP-04 y RF-CAP-05) ---------- */
+const leerNota = t => { const v = Number(String(t ?? "").trim().replace(",", ".")); return String(t ?? "").trim() !== "" && isFinite(v) && v >= 1 && v <= 7 ? Math.round(v * 10) / 10 : null; };
 VIEWS.resultados = capView({
-  title: () => "Asistencia y resultados", hu: () => "RF-CAP-04 · Registrar la asistencia y el resultado · RF-CAP-05 · Registrar certificaciones con vigencia",
-  init(tab) { tab.ver = ""; tab.res = {}; },
+  title: () => "Asistencia y notas", hu: () => "RF-CAP-04 · Registrar la asistencia, la prueba y el resultado · RF-CAP-05 · Registrar certificaciones con vigencia",
+  init(tab) { tab.ver = ""; tab.res = {}; const p = this.sesiones().find(s => !s.cerrada); if (p) tab.ver = p.id; },
   sesiones() { return DB.d.versiones.filter(v => v.fecha <= U.hoy() && DB.cap(v.cap)).sort((a, b) => (a.cerrada - b.cerrada) || (a.fecha < b.fecha ? 1 : -1)); },
+  /* resultado que se obtendrá con lo ingresado en la fila */
+  calc(i, r) {
+    if (!r || !r.asis) return "";
+    if (r.asis === "No") return "Inasistente";
+    if (i.prueba) { const n = leerNota(r.nota); return n == null ? "" : n >= (i.notaMin || 4) ? "Aprobado" : "Reprobado"; }
+    return r.res || "";
+  },
   render(tab) {
     const ss = this.sesiones(), v = DB.version(tab.ver), c = v && DB.cap(v.cap);
     const pend = ss.filter(s => !s.cerrada).length;
-    let body = `<div class="bar info"><b class="ic">i</b><span>Seleccione una sesión ya realizada. Hay ${pend} sesión(es) con resultados pendientes. Las sesiones futuras no aparecen: la capacitación aún no se realiza.</span></div>`;
+    let body = `<div class="bar info"><b class="ic">i</b><span>Seleccione una sesión ya realizada. Hay ${pend} sesión(es) con notas pendientes. Las sesiones futuras no aparecen porque aún no se realizan.</span></div>`;
     if (v) {
       const ins = DB.d.inscripciones.filter(i => i.version === v.id && (v.cerrada ? ["Aprobado", "Reprobado", "Inasistente"].includes(i.estado) : i.estado === "Inscrito"));
+      const conPrueba = ins.some(i => i.prueba);
+      const fila = i => {
+        const f = DB.ficha(i.ficha), r = tab.res[i.id] || {}, out = this.calc(i, r);
+        const nombre = `${E(FICHA.nombre(f))}${f.estado !== "Activo" ? ` <span class="muted small">(${E(f.estado)})</span>` : ""}`;
+        if (v.cerrada) return `<tr><td>${E(i.ficha)}</td><td>${nombre}</td><td>${i.estado === "Inasistente" ? "No" : "Sí"}</td><td>${i.prueba ? `${CAPR.notaTxt(i)} <span class="muted small">(mín. ${U.num1(i.notaMin || 4)})</span>` : "Sin prueba"}</td><td>${pill(i.estado)}</td></tr>`;
+        const asis = `<select data-a="${i.id}" class="req" aria-label="Asistencia de ${E(FICHA.nombre(f))}">${opts([["Sí", "Asistió"], ["No", "No asistió"]], r.asis || "", "Seleccione…")}</select>`;
+        const ev = r.asis === "No" ? `<span class="muted">—</span>` : i.prueba ? `<input type="text" data-n="${i.id}" class="req nota" value="${E(r.nota || "")}" placeholder="1,0 a 7,0" maxlength="3" ${r.asis === "Sí" ? "" : "disabled"} aria-label="Nota de ${E(FICHA.nombre(f))}"> <span class="muted small">mín. ${U.num1(i.notaMin || 4)}</span>`
+          : `<select data-r="${i.id}" class="req" ${r.asis === "Sí" ? "" : "disabled"} aria-label="Resultado de ${E(FICHA.nombre(f))}">${opts(["Aprobado", "Reprobado"], r.res || "", "Sin prueba: indique…")}</select>`;
+        return `<tr><td>${E(i.ficha)}</td><td>${nombre}</td><td>${asis}</td><td>${ev}</td><td data-o="${i.id}">${out ? pill(out) : '<span class="muted">Pendiente</span>'}</td></tr>`;
+      };
       body = `<p class="muted">${E(c.nombre)} · ${U.fecha(v.fecha)} ${v.inicio}–${v.termino} · ${E(v.lugar)} · certificado ${c.vigenciaMeses ? `vigente por ${c.vigenciaMeses} meses` : "permanente"}</p>
-      ${v.cerrada ? `<div class="bar ok"><b class="ic">✓</b><span>Resultados registrados. La sesión está cerrada.</span></div>` : ""}
-      <div class="lv-wrap"><table class="lv"><thead><tr><th>N° ficha</th><th>Colaborador</th><th>Especialidad</th><th style="width:220px">Asistencia y resultado</th></tr></thead><tbody>
-      ${ins.length ? ins.map(i => { const f = DB.ficha(i.ficha); return `<tr><td>${E(i.ficha)}</td><td>${E(FICHA.nombre(f))}${f.estado !== "Activo" ? ` <span class="muted small">(${E(f.estado)})</span>` : ""}</td><td>${E(f.cargo.especialidad || "—")}</td><td>${v.cerrada ? pill(i.estado) : `<select data-r="${i.id}" class="req" aria-label="Resultado de ${E(FICHA.nombre(f))}">${opts(["Aprobado", "Reprobado", "Inasistente"], tab.res[i.id] || "", "Seleccione…")}</select>`}</td></tr>`; }).join("") : `<tr><td colspan="4" class="empty">La sesión no tiene inscritos.</td></tr>`}</tbody></table></div>
-      ${!v.cerrada ? `<div class="actions"><button class="btn" id="rAll">Marcar todos «Aprobado»</button><button class="btn pri" id="rSave">Registrar resultados (F2)</button></div>` : ""}`;
+      ${v.cerrada ? `<div class="bar ok"><b class="ic">✓</b><span>Notas registradas. La sesión está cerrada.</span></div>` : conPrueba ? `<div class="bar info"><b class="ic">i</b><span>1) Marque la asistencia. 2) Ingrese la nota de la prueba de quienes asistieron: con la nota mínima o más quedan <b>Aprobados</b> y reciben su certificación.</span></div>` : ""}
+      <div class="lv-wrap"><table class="lv"><thead><tr><th style="width:100px">N° ficha</th><th>Colaborador</th><th style="width:150px">Asistencia</th><th style="width:220px">Prueba de evaluación</th><th style="width:130px">Resultado</th></tr></thead><tbody>
+      ${ins.length ? ins.map(fila).join("") : `<tr><td colspan="5" class="empty">La sesión no tiene inscritos.</td></tr>`}</tbody></table></div>
+      ${!v.cerrada && ins.length ? `<div class="actions"><button class="btn" id="rAll">Marcar que todos asistieron</button><button class="btn pri" id="rSave">Registrar notas y resultados (F2)</button></div>` : ""}`;
     }
-    return `<div class="dochead"><h2>Asistencia y resultados</h2><span class="sub">Aprobado genera la certificación · Inasistente libera el cupo</span></div>
+    return `<div class="dochead"><h2>Asistencia y notas</h2><span class="sub">Aprobado genera la certificación · No asistió libera el cupo</span></div>
       <div class="filters"><label>Sesión <select id="rV" style="max-width:520px">${opts(ss.map(s => [s.id, `${U.fecha(s.fecha)} · ${DB.cap(s.cap).nombre}${s.cerrada ? " · cerrada" : " · pendiente"}`]), tab.ver, "Seleccione una sesión realizada…")}</select></label></div>${body}`;
   },
   tools(tab) { const v = DB.version(tab.ver); return { guardar: v && !v.cerrada && (() => this.guardar(tab)) }; },
   mount(w, tab) {
-    $("#rV").onchange = e => { tab.ver = e.target.value; tab.res = {}; marcarSucio(tab, false); pintar(); };
-    $$("[data-r]", w).forEach(s => s.onchange = () => { tab.res[s.dataset.r] = s.value; s.classList.remove("err"); marcarSucio(tab); });
-    const a = $("#rAll"); if (a) a.onclick = () => { $$("[data-r]", w).forEach(s => { s.value = "Aprobado"; tab.res[s.dataset.r] = "Aprobado"; s.classList.remove("err"); }); marcarSucio(tab); };
+    $("#rV").onchange = async e => {
+      if (tab.dirty && !await confirmar("¿Cambiar de sesión?", "<p>Se perderán las notas ingresadas que no se han registrado.</p>")) { e.target.value = tab.ver; return; }
+      tab.ver = e.target.value; tab.res = {}; marcarSucio(tab, false); pintar();
+    };
+    const row = id => (tab.res[id] = tab.res[id] || {});
+    const out = id => { const i = DB.d.inscripciones.find(x => x.id === id), o = this.calc(i, tab.res[id]), td = $(`[data-o="${id}"]`, w); if (td) td.innerHTML = o ? pill(o) : '<span class="muted">Pendiente</span>'; };
+    $$("[data-a]", w).forEach(s => s.onchange = () => { row(s.dataset.a).asis = s.value; marcarSucio(tab); guardarScroll(); pintar(); const n = $(`[data-n="${s.dataset.a}"]`); if (n && s.value === "Sí") n.focus(); });
+    $$("[data-n]", w).forEach(s => s.oninput = () => { row(s.dataset.n).nota = s.value; s.classList.toggle("err", !!s.value.trim() && leerNota(s.value) == null); marcarSucio(tab); out(s.dataset.n); });
+    $$("[data-r]", w).forEach(s => s.onchange = () => { row(s.dataset.r).res = s.value; s.classList.remove("err"); marcarSucio(tab); out(s.dataset.r); });
+    const a = $("#rAll"); if (a) a.onclick = () => { $$("[data-a]", w).forEach(s => { row(s.dataset.a).asis = "Sí"; }); marcarSucio(tab); pintar(); };
     const g = $("#rSave"); if (g) g.onclick = () => this.guardar(tab);
   },
   async guardar(tab) {
     const v = DB.version(tab.ver), c = DB.cap(v.cap);
-    if (v.fecha > U.hoy()) return aviso("La capacitación aún no se realiza", "<p>Solo se registran resultados de sesiones realizadas.</p>", "warn");
+    if (v.fecha > U.hoy()) return aviso("La capacitación aún no se realiza", "<p>Solo se registran notas de sesiones realizadas.</p>", "warn");
     const ins = DB.d.inscripciones.filter(i => i.version === v.id && i.estado === "Inscrito");
-    const falt = ins.filter(i => !tab.res[i.id]);
-    if (falt.length) { falt.forEach(i => { const s = $(`[data-r="${i.id}"]`); if (s) s.classList.add("err"); }); return aviso("Faltan resultados", `<p>Indique asistencia y resultado de ${falt.length} colaborador(es).</p>`, "err"); }
-    const n = { Aprobado: 0, Reprobado: 0, Inasistente: 0 };
-    if (!await confirmar("¿Registrar los resultados?", `<p>Se cerrará la sesión del ${U.fecha(v.fecha)}. Los aprobados recibirán su certificación${c.vigenciaMeses ? ` con vencimiento el ${U.fecha(U.sumarMeses(v.fecha, c.vigenciaMeses))}` : " permanente"}.</p>`)) return;
+    const falt = [];
     for (const i of ins) {
-      i.estado = tab.res[i.id]; n[i.estado]++;
+      const r = tab.res[i.id] || {}, n = FICHA.nombre(DB.ficha(i.ficha));
+      if (!r.asis) falt.push(`${n}: indique si asistió`);
+      else if (r.asis === "Sí" && i.prueba && leerNota(r.nota) == null) falt.push(`${n}: ingrese una nota válida entre 1,0 y 7,0`);
+      else if (r.asis === "Sí" && !i.prueba && !r.res) falt.push(`${n}: indique si aprobó o reprobó`);
+    }
+    if (falt.length) { pintar(); falt.length && $$(".work select.req, .work input.nota").forEach(el => { if (!el.value && !el.disabled) el.classList.add("err"); }); return aviso("Faltan datos", `<ul>${falt.map(t => `<li>${E(t)}</li>`).join("")}</ul>`, "err"); }
+    if (!await confirmar("¿Registrar las notas y resultados?", `<p>Se cerrará la sesión del ${U.fecha(v.fecha)}. Los aprobados recibirán su certificación${c.vigenciaMeses ? ` con vencimiento el ${U.fecha(U.sumarMeses(v.fecha, c.vigenciaMeses))}` : " permanente"}.</p>`)) return;
+    const n = { Aprobado: 0, Reprobado: 0, Inasistente: 0 };
+    for (const i of ins) {
+      const r = tab.res[i.id]; i.estado = this.calc(i, r); n[i.estado]++;
+      if (i.prueba && r.asis === "Sí") i.nota = leerNota(r.nota);
+      i.registro = { fecha: U.ahora(), por: ST.user.user };
       if (i.estado === "Aprobado" && c.requiereCert !== false) DB.d.certificaciones.push({ id: CAPR.nuevoId("cert"), ficha: i.ficha, cap: c.id, tipo: c.tipo, competencia: c.competencia, nombre: c.nombre, emision: v.fecha, vence: c.vigenciaMeses ? U.sumarMeses(v.fecha, c.vigenciaMeses) : "" });
     }
     v.cerrada = true;
-    DB.log(ST.user.user, "Capacitaciones", "Registro de resultados", `${c.id} · ${v.id} · ${n.Aprobado} aprobado(s), ${n.Reprobado} reprobado(s), ${n.Inasistente} inasistente(s)`);
+    const notas = ins.filter(i => i.nota != null && i.estado !== "Inasistente").map(i => i.nota);
+    DB.log(ST.user.user, "Capacitaciones", "Registro de notas y resultados", `${c.id} · ${v.id} · ${n.Aprobado} aprobado(s), ${n.Reprobado} reprobado(s), ${n.Inasistente} inasistente(s)${notas.length ? ` · nota promedio ${U.num1(notas.reduce((a, b) => a + b, 0) / notas.length)}` : ""}`);
     marcarSucio(tab, false); tab.res = {}; pintar();
-    aviso("Resultados registrados", `<ul><li>Aprobados: ${n.Aprobado} (certificación emitida)</li><li>Reprobados: ${n.Reprobado}</li><li>Inasistentes: ${n.Inasistente} (cupo liberado)</li></ul>`, "ok");
+    aviso("Notas y resultados registrados", `<ul><li>Aprobados: ${n.Aprobado} (certificación emitida)</li><li>Reprobados: ${n.Reprobado}</li><li>No asistieron: ${n.Inasistente} (cupo liberado)</li>${notas.length ? `<li>Nota promedio de la prueba: ${U.num1(notas.reduce((a, b) => a + b, 0) / notas.length)}</li>` : ""}</ul><p class="muted small">A los reprobados se les puede asignar nuevamente desde «Asignar capacitación a un trabajador».</p>`, "ok");
   },
 });
-HELP.resultados = { t: "Asistencia y resultados", html: "<p>Elija una sesión ya realizada e indique para cada inscrito <b>Aprobado</b>, <b>Reprobado</b> o <b>Inasistente</b>. Todos deben tener resultado para registrar.</p><ul><li>Aprobado emite la certificación con su fecha de vencimiento según la vigencia de la capacitación.</li><li>Inasistente libera el cupo.</li><li>Al registrar, la sesión queda cerrada y solo se puede consultar.</li></ul>" };
+HELP.resultados = { t: "Asistencia y notas", html: "<ol><li>Elija una sesión ya realizada (las pendientes aparecen primero).</li><li>Marque si cada trabajador <b>asistió</b>. Puede usar «Marcar que todos asistieron».</li><li>Si la capacitación tiene <b>prueba de evaluación</b>, ingrese la nota de 1,0 a 7,0. El resultado se calcula solo: con la nota mínima o más queda <b>Aprobado</b>; bajo la mínima, <b>Reprobado</b>.</li><li>Si no tiene prueba, indique Aprobado o Reprobado.</li><li>Pulse <b>Registrar notas y resultados</b>: los aprobados reciben su certificación con fecha de vencimiento, los que no asistieron liberan el cupo y la sesión queda cerrada.</li></ol>" };
 
 /* ---------- Certificaciones (RF-CAP-05 y RF-CAP-06) ---------- */
 VIEWS.certificaciones = capView({
@@ -500,7 +545,7 @@ VIEWS.matriz = {
     <h3 style="font-size:14px;margin:16px 0 6px">Certificaciones vencidas (${d.vencidas.length})</h3>
     ${d.vencidas.length ? `<div class="lv-wrap"><table class="lv"><thead><tr><th>Colaborador</th><th>Certificación</th><th>Venció</th></tr></thead><tbody>${d.vencidas.map(c => `<tr><td>${E(FICHA.nombre(DB.ficha(c.ficha)))}</td><td>${E(c.nombre)}</td><td>${U.fecha(c.vence)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">No hay certificaciones vencidas.</p>`}`;
   },
-  mount(w, tab) { if (puede("capacitaciones")) alertaCap(); $("#mE").onchange = e => { tab.f.esp = e.target.value; pintar(); }; },
+  mount(w, tab) { $("#mE").onchange = e => { tab.f.esp = e.target.value; pintar(); }; },
 };
 HELP.matriz = { t: "Matriz de competencias", html: "<p>Cruza a los colaboradores de Construcción con las certificaciones por tipo. Filtre por especialidad. La columna <b>Habilitado</b> indica si cumple todas las capacitaciones obligatorias de su especialidad con certificación vigente. Las vencidas se listan aparte. Exporte a Excel o PDF desde la barra de herramientas.</p>" };
 
@@ -510,28 +555,29 @@ VIEWS.historialcap = capView({
   init(tab) { tab.ficha = tab.params.ficha || ""; tab.f = { anio: "" }; },
   reparam(tab) { if (tab.params.ficha) tab.ficha = tab.params.ficha; },
   filas(tab) {
-    return DB.d.inscripciones.filter(i => i.ficha === tab.ficha).map(i => { const c = DB.cap(i.cap) || {}, v = DB.version(i.version); const fe = v ? v.fecha : i.fecha; const ce = DB.d.certificaciones.find(x => x.ficha === i.ficha && x.cap === i.cap && v && x.emision === v.fecha); return { _id: i.id, fecha: fe, cap: c.nombre || i.cap, tipo: c.tipo || "", emp: nombreEmpresa(c.empresa), horas: c.dias ? c.dias * 8 : "", estado: i.estado, cert: ce ? (ce.vence ? `${CAPR.certEstado(ce)} · vence ${U.fecha(ce.vence)}` : "Permanente") : "—" }; })
+    return DB.d.inscripciones.filter(i => i.ficha === tab.ficha).map(i => { const c = DB.cap(i.cap) || {}, v = DB.version(i.version); const fe = v ? v.fecha : i.fecha; const ce = DB.d.certificaciones.find(x => x.ficha === i.ficha && x.cap === i.cap && v && x.emision === v.fecha); return { _id: i.id, fecha: fe, cap: c.nombre || i.cap, tipo: c.tipo || "", emp: nombreEmpresa(c.empresa), horas: c.dias ? c.dias * 8 : "", estado: i.estado, nota: CAPR.notaTxt(i), cert: ce ? (ce.vence ? `${CAPR.certEstado(ce)} · vence ${U.fecha(ce.vence)}` : "Permanente") : "—" }; })
       .filter(r => !tab.f.anio || r.fecha.startsWith(tab.f.anio)).sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
   },
-  tools(tab) { return { exportar: tab.ficha && (() => { const f = DB.ficha(tab.ficha); pedirFormato({ titulo: "Historial de capacitaciones", modulo: "Capacitaciones", sensible: true, lineas: [`Colaborador: ${FICHA.nombre(f)} · ${f.id} · RUT ${f.rut}`, `Año: ${tab.f.anio || "Todos"}`], columnas: [{ t: "Fecha" }, { t: "Capacitación" }, { t: "Tipo" }, { t: "Empresa" }, { t: "Horas", num: true }, { t: "Resultado" }, { t: "Certificación" }], filas: this.filas(tab).map(r => [U.fecha(r.fecha), r.cap, r.tipo, r.emp, r.horas, r.estado, r.cert]) }); }) }; },
+  tools(tab) { return { exportar: tab.ficha && (() => { const f = DB.ficha(tab.ficha); pedirFormato({ titulo: "Historial de capacitaciones", modulo: "Capacitaciones", sensible: true, lineas: [`Colaborador: ${FICHA.nombre(f)} · ${f.id} · RUT ${f.rut}`, `Año: ${tab.f.anio || "Todos"}`], columnas: [{ t: "Fecha" }, { t: "Capacitación" }, { t: "Tipo" }, { t: "Empresa" }, { t: "Horas", num: true }, { t: "Resultado" }, { t: "Nota prueba" }, { t: "Certificación" }], filas: this.filas(tab).map(r => [U.fecha(r.fecha), r.cap, r.tipo, r.emp, r.horas, r.estado, r.nota, r.cert]) }); }) }; },
   render(tab) {
     const f = DB.ficha(tab.ficha), fichas = DB.d.fichas.slice().sort((a, b) => FICHA.nombre(a).localeCompare(FICHA.nombre(b)));
     let body = `<div class="bar info"><b class="ic">i</b><span>Seleccione un colaborador para ver todas sus capacitaciones.</span></div>`;
     if (f) {
       const rows = this.filas(tab), apr = rows.filter(r => r.estado === "Aprobado");
-      const lv = listview({ cols: [{ k: "fecha", t: "Fecha", f: r => U.fecha(r.fecha), w: 90, nosort: true }, { k: "cap", t: "Capacitación", nosort: true }, { k: "tipo", t: "Tipo", nosort: true }, { k: "emp", t: "Empresa", nosort: true }, { k: "horas", t: "Horas", num: true, w: 60, nosort: true }, { k: "estado", t: "Resultado", f: r => pill(r.estado), w: 150, nosort: true }, { k: "cert", t: "Certificación", nosort: true }], rows, empty: "Sin capacitaciones registradas." });
+      const lv = listview({ cols: [{ k: "fecha", t: "Fecha", f: r => U.fecha(r.fecha), w: 90, nosort: true }, { k: "cap", t: "Capacitación", nosort: true }, { k: "tipo", t: "Tipo", nosort: true }, { k: "emp", t: "Empresa", nosort: true }, { k: "horas", t: "Horas", num: true, w: 60, nosort: true }, { k: "estado", t: "Resultado", f: r => pill(r.estado), w: 150, nosort: true }, { k: "nota", t: "Nota prueba", w: 85, nosort: true }, { k: "cert", t: "Certificación", nosort: true }], rows, empty: "Sin capacitaciones registradas." });
       const h = CAPR.habilitacion(f);
       body = `<p class="muted">${E(f.id)} · RUT ${E(f.rut)} · ${E(f.cargo.cargo || "—")} · ${E(f.cargo.especialidad || "sin especialidad")} · ${pill(f.estado)}</p>
       ${h.aplica ? (h.habilitado ? `<div class="bar ok"><b class="ic">✓</b><span>Habilitado para obra.</span></div>` : `<div class="bar warn"><b class="ic">⚠</b><span>No habilitado para obra: falta ${E(h.faltan.join(", "))}.</span></div>`) : ""}
       <p>${rows.length} capacitación(es) · ${apr.length} aprobada(s) · ${apr.reduce((s, r) => s + (+r.horas || 0), 0)} horas aprobadas</p>${lv.html}`;
     }
     const anios = [...new Set(DB.d.inscripciones.filter(i => i.ficha === tab.ficha).map(i => { const v = DB.version(i.version); return (v ? v.fecha : i.fecha).slice(0, 4); }))].sort().reverse();
-    return `<div class="dochead"><h2>Historial de capacitaciones</h2>${f ? `<span class="r"><button class="btn" id="hFicha">Ver ficha</button></span>` : ""}</div>
+    return `<div class="dochead"><h2>Historial de capacitaciones</h2>${f ? `<span class="r">${f.estado === "Activo" ? `<button class="btn pri" id="hAdd">Añadir capacitación…</button>` : ""}<button class="btn" id="hFicha">Ver ficha</button></span>` : ""}</div>
       <div class="filters"><label>Colaborador <select id="hF" style="max-width:360px">${opts(fichas.map(x => [x.id, `${FICHA.nombre(x)} · ${x.id}${x.estado === "Desvinculado" ? " (desvinculado)" : ""}`]), tab.ficha, "Seleccione…")}</select></label>${f ? `<label>Año <select id="hA">${opts(anios, tab.f.anio, "Todos")}</select></label>` : ""}</div>${body}`;
   },
   mount(w, tab) {
     $("#hF").onchange = e => { tab.ficha = e.target.value; tab.f.anio = ""; pintar(); };
     const a = $("#hA"); if (a) a.onchange = e => { tab.f.anio = e.target.value; pintar(); };
+    const ad = $("#hAdd"); if (ad) ad.onclick = () => abrir("asignar", { ficha: tab.ficha });
     const b = $("#hFicha"); if (b) b.onclick = () => puede("contrataciones") ? abrir(tab.ficha, { sec: "capacitaciones" }) : aviso("Sin permiso", "<p>Su perfil no permite consultar fichas.</p>", "warn");
   },
 });

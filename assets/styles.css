@@ -3,7 +3,7 @@
   --blue:#0067C0; --blue-d:#005A9E; --bd:#ABADB3; --gr:#F0F0F0; --txt:#1B1B1B; --mut:#5F5F5F; --ph:#8A8A8A;
   --req:#FFF9DB; --sel:#CCE4F7; --selb:#99C9EF; --ok:#107C10; --err:#C42B1C; --warn:#8A5300;
   --warnbg:#FFF4CE; --warnb:#E8C35A; --infobg:#E5F1FB; --infob:#9CC7EE; --okbg:#DFF6DD; --okb:#8FD18B; --errbg:#FDE7E9; --errb:#F1A7AE;
-  --nav:214px;
+  --nav:250px;
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:#1F3B5C;color:var(--txt);font:13px/1.35 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif}
@@ -225,6 +225,41 @@ table.tramos{margin:8px 0}table.tramos td{padding:3px 4px}table.tramos input{min
 .cal-e{display:block;background:#E3ECF5;border-left:3px solid #7FA7CF;margin-top:2px;padding:0 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cal-e.on{background:var(--sel);border-left-color:var(--blue);font-weight:600}
 
+/* inicio, buscador de funciones y asignaciones */
+.h3{font-size:14px;margin:18px 0 8px}
+.hero{background:linear-gradient(180deg,#F3F8FD,#fff);border:1px solid #CFE1F3;padding:12px 14px;margin:6px 0 4px;position:relative}
+.hero label{display:block;font-weight:700;font-size:15px;margin-bottom:6px;color:#123A63}
+.hero input{height:34px;font-size:14px;border-color:#8FB7DD}
+.acc-res{display:flex;flex-direction:column;gap:2px}
+.hero .acc-res:not(:empty){margin-top:6px;border:1px solid #CFE1F3;background:#fff;max-height:340px;overflow:auto}
+.acc{display:flex;flex-direction:column;align-items:flex-start;text-align:left;border:0;border-left:3px solid transparent;background:#fff;padding:7px 10px;cursor:pointer;gap:1px}
+.acc span{color:var(--mut);font-size:12px}
+.acc:hover,.acc.on{background:var(--sel);border-left-color:var(--blue)}
+.dash{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px;margin-bottom:10px}
+.card{border:1px solid #D4D4D4;border-top:4px solid var(--mc,#0067C0);background:#fff;padding:10px 12px 8px;min-width:0}
+.card h3{margin:0 0 8px;font-size:14px;color:var(--mc,#0067C0)}
+.acts{display:flex;flex-direction:column;gap:4px}
+.act{display:flex;flex-direction:column;align-items:flex-start;text-align:left;border:1px solid #E1E1E1;background:#FAFAFA;padding:7px 10px;cursor:pointer;gap:2px}
+.act b{color:#1B1B1B}.act span{color:var(--mut);font-size:12px}
+.act:hover{background:#EEF6FD;border-color:var(--infob)}
+.card .more{margin-top:8px;font-size:12px;line-height:1.7}
+tr.go{cursor:pointer}tr.go:hover td{background:#EEF6FD}
+.tsearch{margin-left:auto;display:flex;align-items:center;gap:8px;height:34px;min-width:250px;border:1px solid #9CC7EE;background:#fff;padding:0 10px;cursor:pointer;color:var(--mut);flex:none}
+.tsearch svg{width:16px;height:16px;fill:none;stroke:#2B5797;stroke-width:2;stroke-linecap:round}
+.tsearch span{flex:1;text-align:left}.tsearch kbd{font:11px inherit;border:1px solid #CCC;background:#F3F3F3;padding:1px 5px}
+.tsearch:hover{border-color:var(--blue);color:var(--txt)}
+.tree .tg{color:#8A8A8A;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:6px 0 1px 28px}
+.tree .mod{border-left:3px solid var(--mc,transparent)!important}
+fieldset.paso>legend{font-size:13px}
+fieldset.paso>legend b{display:inline-flex;width:20px;height:20px;border-radius:50%;background:var(--blue);color:#fff;align-items:center;justify-content:center;margin-right:6px;font-size:12px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0}
+.chip{display:flex;flex-direction:column;align-items:flex-start;border:1px solid #BFBFBF;background:#fff;padding:6px 12px;cursor:pointer;min-width:150px;text-align:left}
+.chip small{color:var(--mut);font-size:11px}
+.chip.oblig{background:var(--warnbg);border-color:var(--warnb)}
+.chip:hover{border-color:var(--blue)}
+.chip.on{border:2px solid var(--blue);background:var(--sel);padding:5px 11px;font-weight:600}
+input.nota{width:70px!important}
+
 @media (max-width:900px){
   .main{grid-template-columns:minmax(0,1fr)}
   .trace{position:static}
@@ -244,6 +279,8 @@ table.tramos{margin:8px 0}table.tramos td{padding:3px 4px}table.tramos input{min
   .dochead .r{flex-wrap:wrap}
   .statusbar span:nth-child(3),.statusbar span:nth-child(4){display:none}
   .row>label.l{width:auto;min-width:90px}
+  .tsearch{min-width:0;margin-left:6px}.tsearch span,.tsearch kbd{display:none}
+  .chip{min-width:0;flex:1 1 140px}
   .cal-d{min-height:44px}.cal-e{font-size:0;height:6px;padding:0}
   .dlg .dbody{padding:14px}
 }

@@ -155,19 +155,20 @@ function semilla() {
   let capN = 0, verN = 0, insN = 0, certN = 0;
   const caps = [], versiones = [], inscripciones = [], certificaciones = [];
   const cap = (anio, nombre, tipo, emp, dias, cupos, obligatoria, especialidades, competencia, vigencia, extra = {}) => {
-    capN++; const c = { id: `CAP-${anio}-${U.pad(caps.filter(x => x.anio === anio).length + 1, 3)}`, nombre, tipo, empresa: E_(emp), dias, anio, cupos, obligatoria, especialidades, competencia, vigenciaMeses: vigencia, requiereCert: true, estado: "Publicada", creada: `${anio}-01-10`, historial: [{ fecha: `10-01-${anio} 10:00`, usuario: "cvaldes", detalle: "Creación en el catálogo" }], ...extra };
+    capN++; const c = { id: `CAP-${anio}-${U.pad(caps.filter(x => x.anio === anio).length + 1, 3)}`, nombre, tipo, empresa: E_(emp), dias, anio, cupos, obligatoria, especialidades, competencia, vigenciaMeses: vigencia, requiereCert: true, prueba: false, notaMin: 4, estado: "Publicada", creada: `${anio}-01-10`, historial: [{ fecha: `10-01-${anio} 10:00`, usuario: "cvaldes", detalle: "Creación en el catálogo" }], ...extra };
     caps.push(c); return c;
   };
   const ver = (c, fecha, ini, fin, lugar, capRut, cerrada) => { if (cerrada && fecha >= HOY) fecha = U.sumarDias(HOY, -(12 + verN * 3)); const v = { id: "VER-" + U.pad(++verN, 4), cap: c.id, fecha, inicio: ini, termino: fin, lugar, capacitador: capRut, cerrada: !!cerrada }; versiones.push(v); return v; };
-  const ins = (c, v, fichaId, origen, estado, fecha) => { const i = { id: "INS-" + U.pad(++insN, 5), cap: c.id, version: v ? v.id : "", ficha: fichaId, origen, estado, fecha: fecha || (v ? v.fecha : c.creada) }; inscripciones.push(i); return i; };
+  const ins = (c, v, fichaId, origen, estado, fecha) => { const i = { id: "INS-" + U.pad(++insN, 5), cap: c.id, version: v ? v.id : "", ficha: fichaId, origen, estado, fecha: fecha || (v ? v.fecha : c.creada), prueba: !!c.prueba, notaMin: c.notaMin || 4, nota: null }; inscripciones.push(i); return i; };
   const cert = (c, fichaId, emision) => { certificaciones.push({ id: "CER-" + U.pad(++certN, 5), ficha: fichaId, cap: c.id, tipo: c.tipo, competencia: c.competencia, nombre: c.nombre, emision, vence: c.vigenciaMeses ? U.sumarMeses(emision, c.vigenciaMeses) : "" }); };
-  const T = (v, lista) => lista.forEach(([n, r]) => { const i = ins(caps.find(c => c.id === v.cap), v, fid(n), "Manual", r); if (r === "Aprobado") cert(caps.find(c => c.id === v.cap), fid(n), v.fecha); });
+  const nota = r => r === "Aprobado" ? Math.round((4.6 + R() * 2.3) * 10) / 10 : r === "Reprobado" ? Math.round((2.8 + R() * 1.1) * 10) / 10 : null;
+  const T = (v, lista) => lista.forEach(([n, r]) => { const i = ins(caps.find(c => c.id === v.cap), v, fid(n), "Manual", r); if (i.prueba) i.nota = nota(r); if (r === "Aprobado") cert(caps.find(c => c.id === v.cap), fid(n), v.fecha); });
 
   /* catálogo del año anterior (certificaciones que vencen o vencieron) */
   const vPvc = U.sumarMeses(U.sumarDias(HOY, 20), -12), vAlu = U.sumarMeses(U.sumarDias(HOY, -6), -12);
   const a1 = Math.min(Y - 1, +U.sumarDias(vPvc, -11).slice(0, 4)), a2 = Math.min(Y - 1, +vAlu.slice(0, 4));
-  const k1 = cap(a1, "Instalación de PVC básico", "Instalación de PVC", 3, 2, 12, false, [], "PVC", 12, { creada: `${a1}-01-15` });
-  const k2 = cap(a2, "Armado de ventanas de aluminio", "Corte y armado de aluminio", 2, 2, 12, false, [], "Aluminio", 12, { creada: `${a2}-01-15` });
+  const k1 = cap(a1, "Instalación de PVC básico", "Instalación de PVC", 3, 2, 12, false, [], "PVC", 12, { creada: `${a1}-01-15`, prueba: true, notaMin: 4 });
+  const k2 = cap(a2, "Armado de ventanas de aluminio", "Corte y armado de aluminio", 2, 2, 12, false, [], "Aluminio", 12, { creada: `${a2}-01-15`, prueba: true, notaMin: 4 });
   const k3 = cap(Y - 1, "Instalación de ventanas en obra", "Instalación de ventanas", 2, 3, 15, false, [], "Instalación", 0, { creada: `${Y - 1}-01-15` });
   [k1, k2, k3].forEach(k => k.historial[0].fecha = `15-01-${k.anio} 10:00`);
   const kv1 = ver(k1, vPvc, "09:00", "17:00", CAT.lugares[0], capacitadores[2].rut, true);
@@ -180,10 +181,10 @@ function semilla() {
   T(kv3, [[205, "Aprobado"], [210, "Aprobado"], [209, "Aprobado"]]);
 
   /* catálogo del año en curso */
-  const c1 = cap(Y, "Trabajo en altura", "Trabajo en altura", 1, 2, 12, true, ["Instalación"], "Instalación", 24);
-  const c2 = cap(Y, "Inducción de seguridad", "Seguridad y prevención", 0, 1, 40, true, ["Aluminio", "PVC", "Instalación"], "", 12);
-  const c3 = cap(Y, "Instalación de PVC nivel 1", "Instalación de PVC", 3, 3, 15, true, ["PVC"], "PVC", 36);
-  const c4 = cap(Y, "Corte de perfiles de aluminio", "Corte y armado de aluminio", 2, 2, 10, true, ["Aluminio"], "Aluminio", 36);
+  const c1 = cap(Y, "Trabajo en altura", "Trabajo en altura", 1, 2, 12, true, ["Instalación"], "Instalación", 24, { prueba: true, notaMin: 5 });
+  const c2 = cap(Y, "Inducción de seguridad", "Seguridad y prevención", 0, 1, 40, true, ["Aluminio", "PVC", "Instalación"], "", 12, { prueba: true, notaMin: 4 });
+  const c3 = cap(Y, "Instalación de PVC nivel 1", "Instalación de PVC", 3, 3, 15, true, ["PVC"], "PVC", 36, { prueba: true, notaMin: 4 });
+  const c4 = cap(Y, "Corte de perfiles de aluminio", "Corte y armado de aluminio", 2, 2, 10, true, ["Aluminio"], "Aluminio", 36, { prueba: true, notaMin: 4 });
   const c5 = cap(Y, "Primeros auxilios", "Primeros auxilios", 0, 1, 30, false, [], "", 24);
   const c6 = cap(Y, "Sellado de termopaneles", "Instalación de ventanas", 3, 1, 12, false, [], "PVC", 0);
   const c7 = cap(Y, "Lectura de planos", "Instalación de ventanas", 2, 2, 20, false, [], "", 0);
@@ -256,7 +257,7 @@ function semilla() {
   ];
 
   const d = {
-    v: 2, creado: HOY, seq: 215, fichas, usuarios, bitacora: [], permisos: U.clon(PERMISOS_BASE), correos: [], recordar: "",
+    v: 3, creado: HOY, seq: 215, fichas, usuarios, bitacora: [], permisos: U.clon(PERMISOS_BASE), correos: [], recordar: "",
     empresas, capacitadores, tipos, capacitaciones: caps, versiones, inscripciones, certificaciones,
     proyectos, fuente, encuestas: [], importaciones: [], reglas, calculos: [], config: { umbral: 5.0, servicio: true }, seqIns: insN, seqVer: verN, seqCert: certN, seqCap: capN,
   };
@@ -284,13 +285,13 @@ function semilla() {
 /*  Almacenamiento (localStorage con respaldo en memoria)                 */
 /* ====================================================================== */
 const DB = {
-  KEY: "sgrh-instalum-prototipo-v2",
+  KEY: "sgrh-instalum-prototipo-v3",
   d: null, persistente: true,
   cargar() {
     let raw = null;
     try { raw = localStorage.getItem(this.KEY); } catch (e) { raw = null; this.persistente = false; }
     try { this.d = raw ? JSON.parse(raw) : semilla(); } catch (e) { this.d = semilla(); }
-    if (!this.d || this.d.v !== 2) this.d = semilla();
+    if (!this.d || this.d.v !== 3) this.d = semilla();
     this.guardar();
   },
   guardar() { try { localStorage.setItem(this.KEY, JSON.stringify(this.d)); } catch (e) { this.persistente = false; } },
@@ -386,18 +387,19 @@ const CAPR = {
     if (vs.some(v => v.cerrada || v.fecha <= hoy)) return "En ejecución";
     return "Planificada";
   },
+  notaTxt: i => (i && i.prueba ? (i.nota != null ? U.num1(i.nota) : "Pendiente") : "—"),
   realizada: c => DB.d.versiones.some(v => v.cap === c.id && v.cerrada),
   nuevoId(tipo) { const d = DB.d; if (tipo === "ins") return "INS-" + U.pad(++d.seqIns, 5); if (tipo === "ver") return "VER-" + U.pad(++d.seqVer, 4); if (tipo === "cert") return "CER-" + U.pad(++d.seqCert, 5); },
   nuevoCapId(anio) { let n = DB.d.capacitaciones.filter(c => c.anio === anio).length, id; do { n++; id = `CAP-${anio}-${U.pad(n, 3)}`; } while (DB.cap(id)); return id; },
   /* inscripción con control de cupos y duplicados (RF-CAP-03) */
-  inscribir(c, fichaId, origen, usuario) {
+  inscribir(c, fichaId, origen, usuario, opc = {}) {
     const f = DB.ficha(fichaId);
     if (this.inscritos(c.id).some(i => i.ficha === fichaId && ["Inscrito", "Pendiente (sin cupo)"].includes(i.estado))) return { ok: false, motivo: "Ya está inscrito en esta capacitación" };
     if (!f || f.estado === "Desvinculado") return { ok: false, motivo: "Colaborador desvinculado" };
     if (f.estado === "Licencia") return { ok: false, motivo: "Con licencia: no disponible para asignación" };
     if (this.cuposLibres(c) <= 0) return { ok: false, motivo: "No hay cupos disponibles" };
     const prox = DB.d.versiones.filter(v => v.cap === c.id && !v.cerrada && v.fecha >= U.hoy()).sort((a, b) => a.fecha < b.fecha ? -1 : 1)[0];
-    DB.d.inscripciones.push({ id: this.nuevoId("ins"), cap: c.id, version: prox ? prox.id : "", ficha: fichaId, origen, estado: "Inscrito", fecha: U.hoy() });
+    DB.d.inscripciones.push({ id: this.nuevoId("ins"), cap: c.id, version: prox ? prox.id : "", ficha: fichaId, origen, estado: "Inscrito", fecha: U.hoy(), prueba: opc.prueba ?? !!c.prueba, notaMin: opc.notaMin ?? (c.notaMin || 4), nota: null, por: usuario || "", obs: opc.obs || "" });
     return { ok: true };
   },
   /* asignación automática de obligatorias (RF-CAP-10) */
@@ -410,7 +412,7 @@ const CAPR = {
       const prev = this.inscritos(c.id).find(i => i.ficha === f.id && ["Inscrito", "Pendiente (sin cupo)"].includes(i.estado));
       if (prev) { if (prev.estado === "Pendiente (sin cupo)" && this.cuposLibres(c) > 0) { prev.estado = "Inscrito"; r.asignados.push(f); } else r.yaInscritos.push(f); continue; }
       if (this.cuposLibres(c) > 0) { this.inscribir(c, f.id, "Asignada automáticamente (obligatoria)", usuario); r.asignados.push(f); }
-      else { DB.d.inscripciones.push({ id: this.nuevoId("ins"), cap: c.id, version: "", ficha: f.id, origen: "Asignada automáticamente (obligatoria)", estado: "Pendiente (sin cupo)", fecha: U.hoy() }); r.pendientes.push(f); }
+      else { DB.d.inscripciones.push({ id: this.nuevoId("ins"), cap: c.id, version: "", ficha: f.id, origen: "Asignada automáticamente (obligatoria)", estado: "Pendiente (sin cupo)", fecha: U.hoy(), prueba: !!c.prueba, notaMin: c.notaMin || 4, nota: null, por: usuario || "" }); r.pendientes.push(f); }
     }
     return r;
   },

@@ -3,48 +3,66 @@
 
 /* ---------- Panel principal (RF-SEG-03: funciones según perfil) ---------- */
 VIEWS.panel = {
-  title: () => "Panel principal", hu: () => "RF-SEG-03 · Menú y funciones según el perfil del usuario",
-  tools: () => ({ nuevo: puede("contrataciones.editar") && (() => abrir("nueva")), buscar: puede("contrataciones") && (() => abrir("colaboradores")) }),
-  render() {
-    const F = DB.d.fichas, u = ST.user, per = U.periodo(-1);
-    const acc = [["Nueva ficha de colaborador", "nueva", "Contrataciones", "contrataciones.editar"], ["Buscar colaborador", "colaboradores", "Contrataciones", "contrataciones"], ["Fichas incompletas", "incompletas", "Contrataciones", "contrataciones"],
-      ["Plan anual de capacitaciones", "catalogo", "Capacitaciones", "capacitaciones"], ["Inscribir colaboradores", "inscripciones", "Capacitaciones", "capacitaciones"], ["Certificaciones y alertas", "certificaciones", "Capacitaciones", "capacitaciones"],
-      ["Importar encuestas de servicio", "importar", "Bonificaciones", "bonificaciones"], ["Cálculo de bonificaciones", "calculo", "Bonificaciones", "bonificaciones"], ["Aprobación y registro para pago", "aprobacion", "Bonificaciones", "bonificaciones.aprobar"],
-      ["Reporte de colaboradores nuevos", "rep:contratacion", "Reportes", "reportes"], ["Reporte de bonificaciones", "rep:bonificacion", "Reportes", "reportes"], ["Reporte de capacitaciones", "rep:capacitacion", "Reportes", "reportes"],
-      ["Cuentas de usuario", "cuentas", "Administración", "admin"], ["Bitácora de auditoría", "bitacora", "Administración", "admin"]].filter(a => puede(a[3]));
-    const inc = F.filter(f => f.estado === "Incompleta");
-    const res = [["Colaboradores activos", F.filter(f => f.estado === "Activo").length], ["Fichas incompletas", inc.length], ["Colaboradores con licencia", F.filter(f => f.estado === "Licencia").length], ["Total de fichas registradas", F.length]];
-    const tareas = [];
-    if (puede("contrataciones.editar")) inc.forEach(f => tareas.push(["Alta", `Completar la ficha ${f.id} · ${FICHA.nombre(f)}`, "Contrataciones", f.id]));
+  title: () => "Inicio", hu: () => "RF-SEG-03 · Funciones según el perfil del usuario · RF-SEG-05 · Ayuda en línea",
+  tools: () => ({ nuevo: puede("contrataciones.editar") && (() => abrir("nueva")), buscar: () => { const q = $("#dQ"); if (q) q.focus(); } }),
+  tareas() {
+    const F = DB.d.fichas, per = U.periodo(-1), t = [];
+    if (puede("contrataciones.editar")) F.filter(f => f.estado === "Incompleta").forEach(f => t.push(["Alta", `Completar la ficha ${f.id} · ${FICHA.nombre(f)}`, "Contrataciones", f.id]));
     if (puede("capacitaciones")) {
-      const certs = DB.d.certificaciones.filter(c => { const f = DB.ficha(c.ficha); return f && f.estado !== "Desvinculado" && ["Vencida", "Por vencer"].includes(CAPR.certEstado(c)) && !DB.d.certificaciones.some(o => o.ficha === c.ficha && o.tipo === c.tipo && o.emision > c.emision); });
-      if (certs.length) tareas.push(["Alta", `${certs.length} certificación(es) vencida(s) o por vencer en 30 días`, "Capacitaciones", "certificaciones"]);
-      const pend = DB.d.versiones.filter(v => !v.cerrada && v.fecha < U.hoy() && DB.d.inscripciones.some(i => i.version === v.id && i.estado === "Inscrito"));
-      pend.forEach(v => tareas.push(["Media", `Registrar asistencia y resultados de «${DB.cap(v.cap).nombre}» (${U.fecha(v.fecha)})`, "Capacitaciones", "resultados"]));
-      res.push(["Capacitaciones del plan " + U.anio(), DB.d.capacitaciones.filter(c => c.anio === U.anio() && c.estado === "Publicada").length]);
+      const certs = certsAlerta();
+      if (certs.length) t.push(["Alta", `${certs.length} certificación(es) vencida(s) o por vencer en 30 días`, "Capacitaciones", "certificaciones"]);
+      DB.d.versiones.filter(v => !v.cerrada && v.fecha <= U.hoy() && DB.d.inscripciones.some(i => i.version === v.id && i.estado === "Inscrito"))
+        .forEach(v => t.push(["Media", `Registrar asistencia y notas de «${DB.cap(v.cap).nombre}» (${U.fecha(v.fecha)})`, "Capacitaciones", "resultados"]));
+      const pend = DB.d.inscripciones.filter(i => i.estado === "Pendiente (sin cupo)").length;
+      if (pend) t.push(["Media", `${pend} trabajador(es) esperando cupo en capacitaciones obligatorias`, "Capacitaciones", "inscripciones"]);
     }
     if (puede("bonificaciones")) {
-      if (!DB.d.importaciones.some(i => i.periodo === per)) tareas.push(["Alta", `Importar las encuestas de ${U.mes(per)}`, "Bonificaciones", "importar"]);
-      else if (!BON.calculo(DB.d, per)) tareas.push(["Media", `Calcular las bonificaciones de ${U.mes(per)}`, "Bonificaciones", "calculo"]);
+      if (!DB.d.importaciones.some(i => i.periodo === per)) t.push(["Alta", `Paso 1: importar las encuestas de ${U.mes(per)}`, "Bonificaciones", "importar"]);
+      else if (!BON.calculo(DB.d, per)) t.push(["Media", `Paso 2: calcular las bonificaciones de ${U.mes(per)}`, "Bonificaciones", "calculo"]);
     }
-    if (puede("bonificaciones.aprobar")) DB.d.calculos.filter(c => c.estado === "Pendiente de aprobación").forEach(c => tareas.push(["Alta", `Aprobar o rechazar el cálculo de ${U.mes(c.periodo)} (${U.pesos(c.total)})`, "Bonificaciones", "aprobacion"]));
-    if (puede("admin")) { DB.d.usuarios.filter(x => x.estado === "Bloqueada").forEach(x => tareas.push(["Media", `Revisar la cuenta bloqueada de ${x.user}`, "Administración", "cuentas"])); res.push(["Cuentas bloqueadas", DB.d.usuarios.filter(x => x.estado === "Bloqueada").length]); }
-    return `<div class="dochead"><h2>Panel principal</h2><span class="sub">Bienvenido/a, ${E(u.nombre)} · ${E(u.perfil)}</span></div>
-    <div class="panelgrid">
-      <fieldset class="fs"><legend>Accesos directos</legend><div class="quick">${acc.map(a => `<button data-k="${a[1]}">› ${a[0]}<span class="m">${a[2]}</span></button>`).join("")}</div></fieldset>
-      <fieldset class="fs"><legend>Resumen</legend><div class="summary">${res.map(r => `<div>${r[0]}</div><div class="v">${r[1]}</div>`).join("")}</div></fieldset>
-    </div>
-    <h3 style="font-size:14px;margin:18px 0 8px">Tareas pendientes</h3>
-    <div class="lv-wrap"><table class="lv"><thead><tr><th style="width:90px">Prioridad</th><th>Tarea</th><th style="width:160px">Módulo</th></tr></thead><tbody>
-    ${tareas.length ? tareas.map(t => `<tr data-go="${E(t[3])}" style="cursor:pointer"><td>${t[0]}</td><td>${E(t[1])}</td><td>${t[2]}</td></tr>`).join("") : `<tr><td colspan="3" class="empty">No hay tareas pendientes.</td></tr>`}</tbody></table></div>
-    <p class="muted small">Haga clic en una tarea para abrirla. Pulse F1 en cualquier pantalla para ver su ayuda.</p>`;
+    if (puede("bonificaciones.aprobar")) DB.d.calculos.filter(c => c.estado === "Pendiente de aprobación").forEach(c => t.push(["Alta", `Paso 3: aprobar o rechazar el cálculo de ${U.mes(c.periodo)} (${U.pesos(c.total)})`, "Bonificaciones", "aprobacion"]));
+    if (puede("admin")) DB.d.usuarios.filter(x => x.estado === "Bloqueada").forEach(x => t.push(["Media", `Revisar la cuenta bloqueada de ${x.user}`, "Administración", "cuentas"]));
+    return t;
   },
-  mount(w) {
-    $$(".quick [data-k]", w).forEach(b => b.onclick = () => abrir(b.dataset.k));
+  render(tab) {
+    const F = DB.d.fichas, u = ST.user, tareas = this.tareas();
+    const res = [["Colaboradores activos", F.filter(f => f.estado === "Activo").length], ["Fichas por completar", F.filter(f => f.estado === "Incompleta").length], ["Con licencia", F.filter(f => f.estado === "Licencia").length]];
+    if (puede("capacitaciones")) res.push(["Capacitaciones del plan " + U.anio(), capsVigentes().length], ["Certificaciones por vencer o vencidas", certsAlerta().length]);
+    if (puede("admin")) res.push(["Cuentas bloqueadas", DB.d.usuarios.filter(x => x.estado === "Bloqueada").length]);
+    const cards = MODS.map(m => {
+      const acts = accionesDe(m.k); if (!acts.length) return "";
+      const main = acts.filter(a => !a.g), extra = acts.filter(a => a.g);
+      return `<section class="card" style="--mc:${m.c}"><h3>${E(m.t)}</h3><div class="acts">${main.map(a => `<button class="act" data-k="${E(a.k)}"><b>${E(a.t)}</b><span>${E(a.d)}</span></button>`).join("")}</div>
+        ${extra.length ? `<div class="more">${[...new Set(extra.map(a => a.g))].map(g => `<div><span class="muted">${E(g)}:</span> ${extra.filter(a => a.g === g).map(a => `<button class="link" data-k="${E(a.k)}">${E(a.t)}</button>`).join(" · ")}</div>`).join("")}</div>` : ""}</section>`;
+    }).join("");
+    return `<div class="dochead"><h2>Inicio</h2><span class="sub">Bienvenido/a, ${E(u.nombre)} · ${E(u.perfil)}</span></div>
+    <div class="hero"><label for="dQ">¿Qué necesita hacer?</label><input type="text" id="dQ" value="${E(tab.q || "")}" maxlength="60" placeholder="Escriba, por ejemplo: asignar capacitación, prueba, nueva ficha, pago de bonificación…" autocomplete="off"><div id="dRes" class="acc-res"></div>
+      <p class="muted small">También puede pulsar <b>Ctrl + K</b> desde cualquier pantalla, o elegir una tarjeta de abajo.</p></div>
+    ${tareas.length ? `<h3 class="h3">Tareas pendientes (${tareas.length})</h3><div class="lv-wrap"><table class="lv"><thead><tr><th style="width:80px">Prioridad</th><th>Tarea · haga clic para resolverla</th><th style="width:140px">Módulo</th></tr></thead><tbody>
+      ${tareas.map(t => `<tr data-go="${E(t[3])}" class="go"><td>${pill(t[0], t[0] === "Alta" ? "warn" : "info")}</td><td>${E(t[1])}</td><td>${t[2]}</td></tr>`).join("")}</tbody></table></div>` : `<div class="bar ok"><b class="ic">✓</b><span>No hay tareas pendientes.</span></div>`}
+    <h3 class="h3">¿Qué desea hacer?</h3><div class="dash">${cards}</div>
+    <fieldset class="fs" style="max-width:560px"><legend>Resumen</legend><div class="summary">${res.map(r => `<div>${r[0]}</div><div class="v">${r[1]}</div>`).join("")}</div></fieldset>`;
+  },
+  mount(w, tab) {
+    $$("[data-k]", w).forEach(b => b.onclick = () => abrir(b.dataset.k));
     $$("[data-go]", w).forEach(tr => tr.onclick = () => { const g = tr.dataset.go; if (g.startsWith("COL-")) { const f = DB.ficha(g); abrir(g, { edit: true, sec: secPendiente(f) }); } else abrir(g); });
+    const q = $("#dQ"), r = $("#dRes");
+    let res = [], sel = 0;
+    const pinta = () => {
+      tab.q = q.value; res = q.value.trim() ? buscarAcciones(q.value) : []; sel = Math.min(sel, Math.max(0, res.length - 1));
+      r.innerHTML = !q.value.trim() ? "" : res.length ? res.map((a, i) => accHtml(a, i === sel)).join("") : sinAcciones;
+      $$("[data-acc]", r).forEach((b, i) => b.onclick = () => abrir(res[i].k));
+    };
+    q.oninput = () => { sel = 0; pinta(); };
+    q.onkeydown = e => {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); sel = Math.max(0, Math.min(res.length - 1, sel + (e.key === "ArrowDown" ? 1 : -1))); pinta(); }
+      if (e.key === "Enter" && res[sel]) { e.preventDefault(); const k = res[sel].k; q.value = ""; tab.q = ""; abrir(k); }
+      if (e.key === "Escape") { q.value = ""; pinta(); }
+    };
+    pinta();
   },
 };
-HELP.panel = { t: "Panel principal", html: "<p>Muestra los accesos directos y las tareas pendientes según su perfil. Las opciones que su perfil no permite no aparecen en el menú ni en el navegador.</p><ul><li>Haga clic en una tarea pendiente para ir a la pantalla que la resuelve.</li><li>Use el menú <b>Ayuda › Trazabilidad de requisitos</b> para ver qué historia de usuario se prueba en cada pantalla.</li></ul>" };
+HELP.panel = { t: "Inicio", html: "<p>Desde aquí se llega a todo el sistema:</p><ul><li><b>¿Qué necesita hacer?</b> Escriba con sus palabras lo que busca (por ejemplo «asignar capacitación», «prueba», «nueva ficha» o «pago») y elija la función. Desde cualquier pantalla puede abrir el mismo buscador con <b>Ctrl + K</b> o con el botón de la barra superior.</li><li><b>Tareas pendientes</b>: haga clic en una para ir directo a resolverla.</li><li><b>Tarjetas por módulo</b>: las acciones más usadas, con una explicación breve. Solo aparecen las que su perfil permite.</li><li>El botón <b>Inicio</b> de la barra superior siempre lo trae de vuelta aquí.</li></ul>" };
 HELP.general = HELP.panel;
 
 /* ---------- Colaboradores (RF-CON-07 buscar · RF-CON-09 estado) ---------- */
@@ -70,7 +88,7 @@ VIEWS.colaboradores = {
     const rows = this.filas(tab);
     const lv = listview({ cols: this.cols, rows, sel: tab.sel, sort: tab.sort, pageSize: 14, page: tab.page, empty: tab.f.q ? `No se encontraron colaboradores para «${tab.f.q}». Revise el RUT, el nombre o el N° de ficha.` : "No hay colaboradores con esos filtros." });
     tab.page = lv.page;
-    return `<div class="dochead"><h2>Colaboradores</h2><span class="sub">${DB.d.fichas.length} fichas registradas</span><span class="r">${puede("contrataciones.editar") ? `<button class="btn pri" id="cNew">Nueva ficha…</button>` : ""}<button class="btn" id="cOpen">Abrir ficha</button></span></div>
+    return `<div class="dochead"><h2>Colaboradores</h2><span class="sub">${DB.d.fichas.length} fichas registradas</span><span class="r">${puede("contrataciones.editar") ? `<button class="btn pri" id="cNew">Nueva ficha…</button>` : ""}<button class="btn" id="cOpen">Abrir ficha</button>${puede("capacitaciones") ? `<button class="btn" id="cCap" title="Asignar una capacitación al colaborador seleccionado">Asignar capacitación…</button>` : ""}</span></div>
     <div class="filters"><label>Buscar <input type="text" id="cQ" value="${E(tab.f.q)}" placeholder="RUT, nombre o N° de ficha" style="width:240px" maxlength="60"></label>
       <label>Estado <select id="cE">${opts(["Todos", ...CAT.estadosFicha, "Incompleta"], tab.f.estado)}</select></label>
       <label>Departamento <select id="cD">${opts(["Todos", ...CAT.departamentos], tab.f.depto)}</select></label>
@@ -84,6 +102,7 @@ VIEWS.colaboradores = {
     $("#cS").onchange = e => { tab.f.esp = e.target.value; tab.page = 0; pintar(); };
     $("#cClr").onclick = () => { tab.f = { q: "", estado: "Todos", depto: "Todos", esp: "Todas" }; tab.page = 0; pintar(); };
     const n = $("#cNew"); if (n) n.onclick = () => abrir("nueva");
+    const cc = $("#cCap"); if (cc) cc.onclick = () => abrir("asignar", tab.sel && DB.ficha(tab.sel) ? { ficha: tab.sel } : {});
     $("#cOpen").onclick = () => tab.sel && DB.ficha(tab.sel) ? abrir(tab.sel) : aviso("Seleccione un colaborador", "<p>Haga clic en una fila de la lista y luego en «Abrir ficha», o haga doble clic sobre la fila.</p>");
     bindList(w, tab, { onOpen: id => abrir(id) }); bindPager(w, tab);
   },
@@ -200,13 +219,13 @@ VIEWS.ficha = {
   },
   /* RF-CON-10: últimas 5 capacitaciones desde la ficha */
   capacitaciones(d) {
-    const ins = DB.d.inscripciones.filter(i => i.ficha === d.id).map(i => { const c = DB.cap(i.cap) || {}, v = DB.version(i.version); const ce = DB.d.certificaciones.find(x => x.ficha === d.id && x.cap === i.cap && (!v || x.emision === v.fecha)); return { _id: i.id, nombre: c.nombre || i.cap, fecha: v ? v.fecha : i.fecha, estado: i.estado, cert: ce ? `${CAPR.certEstado(ce)}${ce.vence ? " · vence " + U.fecha(ce.vence) : ""}` : "—", certE: ce ? CAPR.certEstado(ce) : "" }; })
+    const ins = DB.d.inscripciones.filter(i => i.ficha === d.id).map(i => { const c = DB.cap(i.cap) || {}, v = DB.version(i.version); const ce = DB.d.certificaciones.find(x => x.ficha === d.id && x.cap === i.cap && (!v || x.emision === v.fecha)); return { _id: i.id, nombre: c.nombre || i.cap, fecha: v ? v.fecha : i.fecha, estado: i.estado, nota: CAPR.notaTxt(i), cert: ce ? `${CAPR.certEstado(ce)}${ce.vence ? " · vence " + U.fecha(ce.vence) : ""}` : "—", certE: ce ? CAPR.certEstado(ce) : "" }; })
       .sort((a, b) => (a.fecha < b.fecha ? 1 : -1)).slice(0, 5);
     const h = CAPR.habilitacion(d);
     const hab = !h.aplica ? "" : h.habilitado ? `<div class="bar ok"><b class="ic">✓</b><span>Habilitado para trabajar en obra: cumple las capacitaciones obligatorias de ${E(d.cargo.especialidad)}.</span></div>` : `<div class="bar warn"><b class="ic">⚠</b><span>No habilitado para obra. Le falta: ${E(h.faltan.join(", "))}.</span></div>`;
-    const lv = ins.length ? listview({ cols: [{ k: "nombre", t: "Capacitación", nosort: true }, { k: "fecha", t: "Fecha", f: r => U.fecha(r.fecha), w: 95, nosort: true }, { k: "estado", t: "Resultado", f: r => pill(r.estado), w: 150, nosort: true }, { k: "cert", t: "Certificación", f: r => r.certE ? `${pill(r.certE)} <span class="muted small">${E(r.cert.replace(/^[^·]*·?\s?/, ""))}</span>` : "—", nosort: true }], rows: ins }).html : `<div class="empty" style="border:1px solid #DDD">Sin capacitaciones registradas.</div>`;
+    const lv = ins.length ? listview({ cols: [{ k: "nombre", t: "Capacitación", nosort: true }, { k: "fecha", t: "Fecha", f: r => U.fecha(r.fecha), w: 95, nosort: true }, { k: "estado", t: "Resultado", f: r => pill(r.estado), w: 150, nosort: true }, { k: "nota", t: "Nota prueba", w: 85, nosort: true }, { k: "cert", t: "Certificación", f: r => r.certE ? `${pill(r.certE)} <span class="muted small">${E(r.cert.replace(/^[^·]*·?\s?/, ""))}</span>` : "—", nosort: true }], rows: ins }).html : `<div class="empty" style="border:1px solid #DDD">Sin capacitaciones registradas.</div>`;
     return `<div style="padding-top:10px">${hab}<p class="muted small" style="margin:4px 0 8px">Últimas 5 capacitaciones del colaborador.</p>${lv}
-      <div class="actions"><button class="btn" data-a="histcap" ${puede("capacitaciones") ? "" : "disabled title='Requiere permiso del módulo de Capacitaciones'"}>Ver historial completo…</button></div></div>`;
+      <div class="actions">${puede("capacitaciones") ? `${d.estado === "Activo" ? `<button class="btn pri" data-a="addcap">Añadir capacitación…</button>` : ""}<button class="btn" data-a="histcap">Ver historial completo…</button>` : `<span class="muted small">Para asignar capacitaciones se requiere el permiso del módulo de Capacitaciones.</span>`}</div></div>`;
   },
   mount(w, tab) {
     $$("[data-sec]", w).forEach(b => b.onclick = () => { guardarScroll(); tab.sec = b.dataset.sec; tab.focused = false; pintar(); });
@@ -263,6 +282,7 @@ VIEWS.ficha = {
     if (a === "sig") { tab.sec = orden[Math.min(orden.length - 1, orden.indexOf(tab.sec) + 1)]; tab.focused = false; $("#work").scrollTop = 0; tab.scroll = 0; return pintar(); }
     if (a === "cancelar" || a === "cerrar") return cerrarTab(tab.key);
     if (a === "histcap") return abrir("histcap:" + tab.data.id);
+    if (a === "addcap") return abrir("asignar", { ficha: tab.data.id });
     if (a === "editar") { tab.mode = "editar"; tab.focused = false; if (tab.sec === "historial" || tab.sec === "capacitaciones") tab.sec = "personales"; return pintar(); }
     if (a === "cancelarEd") {
       if (tab.dirty && !await confirmar("¿Cancelar la edición?", "<p>Se descartarán los cambios no guardados.</p>", "Descartar cambios", "Seguir editando")) return;

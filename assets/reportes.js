@@ -63,12 +63,13 @@ VIEWS.reporte = {
       const vs = DB.d.versiones.filter(v => v.cap === c.id && v.cerrada && v.fecha >= f.d && v.fecha <= f.h);
       const ins = DB.d.inscripciones.filter(i => vs.some(v => v.id === i.version) && ["Aprobado", "Reprobado", "Inasistente"].includes(i.estado) && (() => { const x = DB.ficha(i.ficha); return x && this.pasa(f, x); })());
       const apr = ins.filter(i => i.estado === "Aprobado").length, asis = ins.filter(i => i.estado !== "Inasistente").length;
-      return [c.id, c.nombre, c.tipo, nombreEmpresa(c.empresa), vs.length ? "Realizada" : "No realizada", vs.length, ins.length, asis, apr, ins.length ? Math.round(apr / ins.length * 100) + "%" : "—"];
+      const ns = ins.filter(i => i.nota != null).map(i => i.nota);
+      return [c.id, c.nombre, c.tipo, nombreEmpresa(c.empresa), vs.length ? "Realizada" : "No realizada", vs.length, ins.length, asis, apr, ins.length ? Math.round(apr / ins.length * 100) + "%" : "—", ns.length ? U.num1(ns.reduce((x, y) => x + y, 0) / ns.length) : "—", ns];
     });
     const real = filas.filter(r => r[4] === "Realizada").length, pct = caps.length ? Math.round(real / caps.length * 100) : 0;
     const totIns = filas.reduce((s, r) => s + r[6], 0), totApr = filas.reduce((s, r) => s + r[8], 0);
-    return { columnas: [{ t: "Código" }, { t: "Capacitación" }, { t: "Tipo" }, { t: "Empresa" }, { t: "Situación" }, { t: "Sesiones", num: true }, { t: "Participantes", num: true }, { t: "Asistentes", num: true }, { t: "Aprobados", num: true }, { t: "% aprobación" }], filas,
-      total: ["", "Total", "", "", `${real} de ${caps.length}`, filas.reduce((s, r) => s + r[5], 0), totIns, filas.reduce((s, r) => s + r[7], 0), totApr, totIns ? Math.round(totApr / totIns * 100) + "%" : "—"],
+    return { columnas: [{ t: "Código" }, { t: "Capacitación" }, { t: "Tipo" }, { t: "Empresa" }, { t: "Situación" }, { t: "Sesiones", num: true }, { t: "Participantes", num: true }, { t: "Asistentes", num: true }, { t: "Aprobados", num: true }, { t: "% aprobación" }, { t: "Nota promedio" }], filas: filas.map(r => r.slice(0, 11)),
+      total: ["", "Total", "", "", `${real} de ${caps.length}`, filas.reduce((s, r) => s + r[5], 0), totIns, filas.reduce((s, r) => s + r[7], 0), totApr, totIns ? Math.round(totApr / totIns * 100) + "%" : "—", (() => { const ns = filas.flatMap(r => r[11]); return ns.length ? U.num1(ns.reduce((x, y) => x + y, 0) / ns.length) : "—"; })()],
       resumen: [["Capacitaciones ofertadas", caps.length], ["Capacitaciones realizadas", real], ["% de ejecución del plan", pct + "%"], ["Participantes", totIns], ["Aprobados", totApr]], vacio: "No hay capacitaciones ofertadas en el período y filtros seleccionados." };
   },
   datosExport(tab) {
